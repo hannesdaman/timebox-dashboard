@@ -19,7 +19,6 @@
     --accent-glow: rgba(108, 92, 231, 0.15);
     --green: #00b894;
     --green-dim: rgba(0, 184, 148, 0.12);
-    --orange: #fdcb6e;
     --red: #e17055;
     --font: 'DM Sans', system-ui, sans-serif;
     --mono: 'JetBrains Mono', monospace;
@@ -37,15 +36,20 @@ h1 span { color: var(--text-dim); font-weight: 300; }
 .header-stat { text-align: right; }
 .header-stat-value { font-family: var(--mono); font-size: 28px; font-weight: 600; color: var(--green); }
 .header-stat-label { font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1.5px; margin-top: 2px; }
+.status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+.status-dot.online { background: var(--green); }
+.status-dot.offline { background: var(--red); }
+.status-text { font-size: 11px; color: var(--text-dim); margin-top: 8px; }
 .input-section { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 28px; margin-bottom: 32px; }
 .input-section h2 { font-weight: 500; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; font-size: 12px; margin-bottom: 20px; }
 .input-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
 .input-group { display: flex; flex-direction: column; gap: 6px; }
 .input-group label { font-size: 13px; color: var(--text-dim); }
-.input-group input, .input-group select { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; color: var(--text); font-family: var(--mono); font-size: 14px; outline: none; transition: border-color 0.2s; }
+.input-group input { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; color: var(--text); font-family: var(--mono); font-size: 14px; outline: none; transition: border-color 0.2s; }
 .input-group input:focus { border-color: var(--accent); }
 .btn { background: var(--accent); color: white; border: none; border-radius: 8px; padding: 10px 24px; font-family: var(--font); font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; letter-spacing: 0.3px; }
 .btn:hover { transform: translateY(-1px); box-shadow: 0 4px 20px var(--accent-glow); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 .btn-danger { background: transparent; border: 1px solid var(--red); color: var(--red); padding: 6px 12px; font-size: 12px; }
 .btn-danger:hover { background: var(--red); color: white; }
 .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 32px; }
@@ -70,6 +74,7 @@ h1 span { color: var(--text-dim); font-weight: 300; }
 .quick-btn { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 16px; color: var(--text); font-family: var(--mono); font-size: 13px; cursor: pointer; transition: all 0.2s; }
 .quick-btn:hover { border-color: var(--accent); background: var(--accent-glow); }
 .streak-badge { display: inline-flex; align-items: center; gap: 6px; background: var(--green-dim); color: var(--green); padding: 6px 14px; border-radius: 20px; font-family: var(--mono); font-size: 14px; font-weight: 600; }
+.loading { text-align: center; padding: 40px; color: var(--text-dim); }
 @media (max-width: 768px) { .charts-grid { grid-template-columns: 1fr; } .header-stats { gap: 20px; } .header-stat-value { font-size: 22px; } }
 </style>
 </head>
@@ -80,24 +85,27 @@ h1 span { color: var(--text-dim); font-weight: 300; }
         <div>
             <div class="logo">
                 <div class="logo-icon">TB</div>
-                <div><h1>TimeBox <span>Dashboard</span></h1></div>
+                <div>
+                    <h1>TimeBox <span>Dashboard</span></h1>
+                    <div class="status-text" id="statusText"><span class="status-dot" id="statusDot"></span>Connecting...</div>
+                </div>
             </div>
         </div>
         <div class="header-stats">
             <div class="header-stat">
-                <div class="header-stat-value" id="totalToday">0</div>
+                <div class="header-stat-value" id="totalToday">-</div>
                 <div class="header-stat-label">Minutes Today</div>
             </div>
             <div class="header-stat">
-                <div class="header-stat-value" id="totalWeek">0</div>
+                <div class="header-stat-value" id="totalWeek">-</div>
                 <div class="header-stat-label">This Week</div>
             </div>
             <div class="header-stat">
-                <div class="header-stat-value" id="totalAll">0</div>
+                <div class="header-stat-value" id="totalAll">-</div>
                 <div class="header-stat-label">All Time</div>
             </div>
             <div class="header-stat">
-                <div id="streakBadge" class="streak-badge">0 day streak</div>
+                <div id="streakBadge" class="streak-badge">- day streak</div>
                 <div class="header-stat-label" style="margin-top:6px">Current Streak</div>
             </div>
         </div>
@@ -107,7 +115,7 @@ h1 span { color: var(--text-dim); font-weight: 300; }
         <div class="input-row">
             <div class="input-group"><label>Date</label><input type="date" id="sessionDate"></div>
             <div class="input-group"><label>Duration (min)</label><input type="number" id="sessionMinutes" min="1" max="300" value="50" style="width:100px"></div>
-            <button class="btn" onclick="addSession()">Log Session</button>
+            <button class="btn" id="addBtn" onclick="addSession()">Log Session</button>
         </div>
         <div class="quick-add">
             <button class="quick-btn" onclick="quickAdd(25)">+25 min</button>
@@ -123,33 +131,280 @@ h1 span { color: var(--text-dim); font-weight: 300; }
     </div>
     <div class="feed-section">
         <h3>Session Feed</h3>
-        <div class="feed-list" id="feedList"><div class="feed-empty">No sessions logged yet. Add your first session above.</div></div>
+        <div class="feed-list" id="feedList"><div class="loading">Loading sessions...</div></div>
     </div>
 </div>
 <script>
-function getSessions(){try{return JSON.parse(localStorage.getItem('timebox_sessions')||'[]')}catch(e){return[]}}
-function saveSessions(s){localStorage.setItem('timebox_sessions',JSON.stringify(s))}
-function addSession(){var d=document.getElementById('sessionDate').value;var m=parseInt(document.getElementById('sessionMinutes').value);if(!d||!m||m<1)return;var s=getSessions();s.push({date:d,minutes:m,id:Date.now()});saveSessions(s);refreshAll()}
-function quickAdd(mins){document.getElementById('sessionMinutes').value=mins;if(!document.getElementById('sessionDate').value)document.getElementById('sessionDate').value=new Date().toISOString().split('T')[0];addSession()}
-function deleteSession(id){saveSessions(getSessions().filter(function(s){return s.id!==id}));refreshAll()}
-function getToday(){return new Date().toISOString().split('T')[0]}
-function getWeekStart(d){var date=new Date(d);var day=date.getDay();var diff=date.getDate()-day+(day===0?-6:1);return new Date(date.setDate(diff)).toISOString().split('T')[0]}
-function sumByDate(sessions){var m={};sessions.forEach(function(s){m[s.date]=(m[s.date]||0)+s.minutes});return m}
-function getStreak(sessions){var byDate=sumByDate(sessions);var d=new Date();var streak=0;if(!byDate[d.toISOString().split('T')[0]]){d.setDate(d.getDate()-1)}while(byDate[d.toISOString().split('T')[0]]){streak++;d.setDate(d.getDate()-1)}return streak}
-function sumByWeek(sessions){var m={};sessions.forEach(function(s){var ws=getWeekStart(s.date);m[ws]=(m[ws]||0)+s.minutes});return m}
-function sumByMonth(sessions){var m={};sessions.forEach(function(s){var k=s.date.substring(0,7);m[k]=(m[k]||0)+s.minutes});return m}
-function updateHeaderStats(sessions){var byDate=sumByDate(sessions);var today=getToday();document.getElementById('totalToday').textContent=byDate[today]||0;var ws=getWeekStart(today);var wm=0;Object.keys(byDate).forEach(function(d){if(getWeekStart(d)===ws)wm+=byDate[d]});document.getElementById('totalWeek').textContent=wm;document.getElementById('totalAll').textContent=sessions.reduce(function(a,s){return a+s.minutes},0);document.getElementById('streakBadge').textContent=getStreak(sessions)+' day streak'}
-var charts={};
-function cc(){return{accent:'#6c5ce7',accentLight:'rgba(108,92,231,0.3)',green:'#00b894',greenLight:'rgba(0,184,148,0.2)',text:'#8888a0',grid:'rgba(42,42,58,0.6)'}}
-function buildWeeklyChart(sessions){var bw=sumByWeek(sessions);var weeks=Object.keys(bw).sort();if(weeks.length>12)weeks=weeks.slice(weeks.length-12);var labels=weeks.map(function(w){return new Date(w).toLocaleDateString('en',{month:'short',day:'numeric'})});var data=weeks.map(function(w){return Math.round(bw[w]/60*10)/10});var c=cc();if(charts.weekly)charts.weekly.destroy();charts.weekly=new Chart(document.getElementById('weeklyChart'),{type:'bar',data:{labels:labels,datasets:[{label:'Hours',data:data,backgroundColor:c.accent,borderRadius:6,borderSkipped:false,barPercentage:0.6},{label:'Trend',data:data,type:'line',borderColor:c.green,backgroundColor:c.greenLight,borderWidth:2,pointRadius:4,pointBackgroundColor:c.green,tension:0.3,fill:true,yAxisID:'y'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,grid:{color:c.grid},ticks:{color:c.text,callback:function(v){return v+'h'}}},x:{grid:{display:false},ticks:{color:c.text,font:{size:11}}}}}})}
-function buildDailyChart(sessions){var byDate=sumByDate(sessions);var today=new Date();var ws=getWeekStart(today.toISOString().split('T')[0]);var labels=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];var data=[];var d=new Date(ws);for(var i=0;i<7;i++){data.push(byDate[d.toISOString().split('T')[0]]||0);d.setDate(d.getDate()+1)}var c=cc();if(charts.daily)charts.daily.destroy();charts.daily=new Chart(document.getElementById('dailyChart'),{type:'bar',data:{labels:labels,datasets:[{data:data,backgroundColor:data.map(function(v,i){var dd=new Date(ws);dd.setDate(dd.getDate()+i);return dd.toISOString().split('T')[0]===getToday()?c.green:c.accent}),borderRadius:6,borderSkipped:false,barPercentage:0.5}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,grid:{color:c.grid},ticks:{color:c.text,callback:function(v){return v+'m'}}},x:{grid:{display:false},ticks:{color:c.text}}}}})}
-function buildMonthlyChart(sessions){var bm=sumByMonth(sessions);var months=Object.keys(bm).sort();if(months.length>12)months=months.slice(months.length-12);var labels=months.map(function(m){var p=m.split('-');return new Date(p[0],p[1]-1).toLocaleDateString('en',{month:'short',year:'2-digit'})});var data=months.map(function(m){return Math.round(bm[m]/60*10)/10});var c=cc();if(charts.monthly)charts.monthly.destroy();charts.monthly=new Chart(document.getElementById('monthlyChart'),{type:'bar',data:{labels:labels,datasets:[{data:data,backgroundColor:c.accent,borderRadius:6,borderSkipped:false,barPercentage:0.5}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,grid:{color:c.grid},ticks:{color:c.text,callback:function(v){return v+'h'}}},x:{grid:{display:false},ticks:{color:c.text,font:{size:11}}}}}})}
-function buildCumulativeChart(sessions){var sorted=sessions.slice().sort(function(a,b){return a.date.localeCompare(b.date)});if(sorted.length===0){if(charts.cumulative)charts.cumulative.destroy();return}var cum=0;var byDate={};sorted.forEach(function(s){byDate[s.date]=(byDate[s.date]||0)+s.minutes});var dates=Object.keys(byDate).sort();var labels=[];var data=[];dates.forEach(function(d){cum+=byDate[d];labels.push(new Date(d).toLocaleDateString('en',{month:'short',day:'numeric'}));data.push(Math.round(cum/60*10)/10)});var c=cc();if(charts.cumulative)charts.cumulative.destroy();charts.cumulative=new Chart(document.getElementById('cumulativeChart'),{type:'line',data:{labels:labels,datasets:[{label:'Cumulative Hours',data:data,borderColor:c.green,backgroundColor:c.greenLight,borderWidth:2.5,pointRadius:3,pointBackgroundColor:c.green,tension:0.25,fill:true}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,grid:{color:c.grid},ticks:{color:c.text,callback:function(v){return v+'h'}}},x:{grid:{display:false},ticks:{color:c.text,font:{size:11},maxTicksLimit:12}}}}})}
-function buildFeed(sessions){var list=document.getElementById('feedList');var sorted=sessions.slice().sort(function(a,b){return b.date.localeCompare(a.date)||b.id-a.id});if(sorted.length===0){list.innerHTML='<div class="feed-empty">No sessions logged yet.</div>';return}var html='';sorted.forEach(function(s){var d=new Date(s.date);var ds=d.toLocaleDateString('en',{weekday:'short',month:'short',day:'numeric'});html+='<div class="feed-item"><div class="feed-item-left"><div class="feed-dot"></div><div><span class="feed-duration">'+s.minutes+' min</span><div class="feed-time">'+ds+'</div></div></div><button class="btn btn-danger" onclick="deleteSession('+s.id+')">Delete</button></div>'});list.innerHTML=html}
-function refreshAll(){var s=getSessions();updateHeaderStats(s);buildWeeklyChart(s);buildDailyChart(s);buildMonthlyChart(s);buildCumulativeChart(s);buildFeed(s)}
-document.getElementById('sessionDate').value=getToday();
-Chart.defaults.font.family="'DM Sans',system-ui,sans-serif";
-Chart.defaults.color='#8888a0';
+// --- SUPABASE CONFIG ---
+var SUPABASE_URL = 'https://gujufwafdradmmehtafx.supabase.co';
+var SUPABASE_KEY = 'sb_publishable_pDokDYT1VPQD2_DA3t67Dg_-0yBg-VI';
+
+function supaFetch(path, options) {
+    var opts = options || {};
+    var headers = {
+        'apikey': SUPABASE_KEY,
+        'Authorization': 'Bearer ' + SUPABASE_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': opts.prefer || ''
+    };
+    return fetch(SUPABASE_URL + '/rest/v1/' + path, {
+        method: opts.method || 'GET',
+        headers: headers,
+        body: opts.body ? JSON.stringify(opts.body) : undefined
+    });
+}
+
+// --- DATA LAYER ---
+var sessionsCache = [];
+
+async function loadSessions() {
+    try {
+        var resp = await supaFetch('sessions?select=*&order=session_date.desc,created_at.desc');
+        if (!resp.ok) throw new Error('API error ' + resp.status);
+        sessionsCache = await resp.json();
+        setStatus(true);
+        return sessionsCache;
+    } catch(e) {
+        console.error('Load failed:', e);
+        setStatus(false);
+        return [];
+    }
+}
+
+async function addSession() {
+    var date = document.getElementById('sessionDate').value;
+    var minutes = parseInt(document.getElementById('sessionMinutes').value);
+    if (!date || !minutes || minutes < 1) return;
+
+    document.getElementById('addBtn').disabled = true;
+    try {
+        var resp = await supaFetch('sessions', {
+            method: 'POST',
+            prefer: 'return=representation',
+            body: { session_date: date, duration: minutes }
+        });
+        if (!resp.ok) throw new Error('Insert failed');
+        await refreshAll();
+    } catch(e) {
+        console.error('Add failed:', e);
+        alert('Failed to save session. Check your connection.');
+    }
+    document.getElementById('addBtn').disabled = false;
+}
+
+function quickAdd(mins) {
+    document.getElementById('sessionMinutes').value = mins;
+    if (!document.getElementById('sessionDate').value) {
+        document.getElementById('sessionDate').value = getToday();
+    }
+    addSession();
+}
+
+async function deleteSession(id) {
+    try {
+        var resp = await supaFetch('sessions?id=eq.' + id, { method: 'DELETE' });
+        if (!resp.ok) throw new Error('Delete failed');
+        await refreshAll();
+    } catch(e) {
+        console.error('Delete failed:', e);
+    }
+}
+
+function setStatus(online) {
+    var dot = document.getElementById('statusDot');
+    var text = document.getElementById('statusText');
+    if (online) {
+        dot.className = 'status-dot online';
+        text.innerHTML = '<span class="status-dot online"></span>Connected to Supabase';
+    } else {
+        dot.className = 'status-dot offline';
+        text.innerHTML = '<span class="status-dot offline"></span>Offline — check connection';
+    }
+}
+
+// --- CALCULATIONS ---
+function getToday() { return new Date().toISOString().split('T')[0]; }
+
+function getWeekStart(d) {
+    var date = new Date(d + 'T00:00:00');
+    var day = date.getDay();
+    var diff = date.getDate() - day + (day === 0 ? -6 : 1);
+    return new Date(date.setDate(diff)).toISOString().split('T')[0];
+}
+
+function sumByDate(sessions) {
+    var m = {};
+    sessions.forEach(function(s) {
+        var d = s.session_date;
+        m[d] = (m[d] || 0) + s.duration;
+    });
+    return m;
+}
+
+function getStreak(sessions) {
+    var byDate = sumByDate(sessions);
+    var d = new Date();
+    var streak = 0;
+    if (!byDate[d.toISOString().split('T')[0]]) {
+        d.setDate(d.getDate() - 1);
+    }
+    while (byDate[d.toISOString().split('T')[0]]) {
+        streak++;
+        d.setDate(d.getDate() - 1);
+    }
+    return streak;
+}
+
+function sumByWeek(sessions) {
+    var m = {};
+    sessions.forEach(function(s) {
+        var ws = getWeekStart(s.session_date);
+        m[ws] = (m[ws] || 0) + s.duration;
+    });
+    return m;
+}
+
+function sumByMonth(sessions) {
+    var m = {};
+    sessions.forEach(function(s) {
+        var k = s.session_date.substring(0, 7);
+        m[k] = (m[k] || 0) + s.duration;
+    });
+    return m;
+}
+
+// --- HEADER STATS ---
+function updateHeaderStats(sessions) {
+    var byDate = sumByDate(sessions);
+    var today = getToday();
+    document.getElementById('totalToday').textContent = byDate[today] || 0;
+
+    var ws = getWeekStart(today);
+    var wm = 0;
+    Object.keys(byDate).forEach(function(d) {
+        if (getWeekStart(d) === ws) wm += byDate[d];
+    });
+    document.getElementById('totalWeek').textContent = wm;
+    document.getElementById('totalAll').textContent = sessions.reduce(function(a, s) { return a + s.duration; }, 0);
+    document.getElementById('streakBadge').textContent = getStreak(sessions) + ' day streak';
+}
+
+// --- CHARTS ---
+var charts = {};
+function cc() { return { accent: '#6c5ce7', accentLight: 'rgba(108,92,231,0.3)', green: '#00b894', greenLight: 'rgba(0,184,148,0.2)', text: '#8888a0', grid: 'rgba(42,42,58,0.6)' }; }
+
+function buildWeeklyChart(sessions) {
+    var bw = sumByWeek(sessions);
+    var weeks = Object.keys(bw).sort();
+    if (weeks.length > 12) weeks = weeks.slice(weeks.length - 12);
+    var labels = weeks.map(function(w) { return new Date(w + 'T00:00:00').toLocaleDateString('en', { month: 'short', day: 'numeric' }); });
+    var data = weeks.map(function(w) { return Math.round(bw[w] / 60 * 10) / 10; });
+    var c = cc();
+    if (charts.weekly) charts.weekly.destroy();
+    charts.weekly = new Chart(document.getElementById('weeklyChart'), {
+        type: 'bar',
+        data: { labels: labels, datasets: [
+            { label: 'Hours', data: data, backgroundColor: c.accent, borderRadius: 6, borderSkipped: false, barPercentage: 0.6 },
+            { label: 'Trend', data: data, type: 'line', borderColor: c.green, backgroundColor: c.greenLight, borderWidth: 2, pointRadius: 4, pointBackgroundColor: c.green, tension: 0.3, fill: true, yAxisID: 'y' }
+        ]},
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true, grid: { color: c.grid }, ticks: { color: c.text, callback: function(v) { return v + 'h'; } } }, x: { grid: { display: false }, ticks: { color: c.text, font: { size: 11 } } } } }
+    });
+}
+
+function buildDailyChart(sessions) {
+    var byDate = sumByDate(sessions);
+    var today = getToday();
+    var ws = getWeekStart(today);
+    var labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    var data = [];
+    var d = new Date(ws + 'T00:00:00');
+    for (var i = 0; i < 7; i++) {
+        data.push(byDate[d.toISOString().split('T')[0]] || 0);
+        d.setDate(d.getDate() + 1);
+    }
+    var c = cc();
+    if (charts.daily) charts.daily.destroy();
+    charts.daily = new Chart(document.getElementById('dailyChart'), {
+        type: 'bar',
+        data: { labels: labels, datasets: [{ data: data,
+            backgroundColor: data.map(function(v, i) { var dd = new Date(ws + 'T00:00:00'); dd.setDate(dd.getDate() + i); return dd.toISOString().split('T')[0] === today ? c.green : c.accent; }),
+            borderRadius: 6, borderSkipped: false, barPercentage: 0.5 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true, grid: { color: c.grid }, ticks: { color: c.text, callback: function(v) { return v + 'm'; } } }, x: { grid: { display: false }, ticks: { color: c.text } } } }
+    });
+}
+
+function buildMonthlyChart(sessions) {
+    var bm = sumByMonth(sessions);
+    var months = Object.keys(bm).sort();
+    if (months.length > 12) months = months.slice(months.length - 12);
+    var labels = months.map(function(m) { var p = m.split('-'); return new Date(p[0], p[1] - 1).toLocaleDateString('en', { month: 'short', year: '2-digit' }); });
+    var data = months.map(function(m) { return Math.round(bm[m] / 60 * 10) / 10; });
+    var c = cc();
+    if (charts.monthly) charts.monthly.destroy();
+    charts.monthly = new Chart(document.getElementById('monthlyChart'), {
+        type: 'bar',
+        data: { labels: labels, datasets: [{ data: data, backgroundColor: c.accent, borderRadius: 6, borderSkipped: false, barPercentage: 0.5 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true, grid: { color: c.grid }, ticks: { color: c.text, callback: function(v) { return v + 'h'; } } }, x: { grid: { display: false }, ticks: { color: c.text, font: { size: 11 } } } } }
+    });
+}
+
+function buildCumulativeChart(sessions) {
+    var sorted = sessions.slice().sort(function(a, b) { return a.session_date.localeCompare(b.session_date); });
+    if (sorted.length === 0) { if (charts.cumulative) charts.cumulative.destroy(); return; }
+    var cum = 0;
+    var byDate = {};
+    sorted.forEach(function(s) { byDate[s.session_date] = (byDate[s.session_date] || 0) + s.duration; });
+    var dates = Object.keys(byDate).sort();
+    var labels = [], data = [];
+    dates.forEach(function(d) {
+        cum += byDate[d];
+        labels.push(new Date(d + 'T00:00:00').toLocaleDateString('en', { month: 'short', day: 'numeric' }));
+        data.push(Math.round(cum / 60 * 10) / 10);
+    });
+    var c = cc();
+    if (charts.cumulative) charts.cumulative.destroy();
+    charts.cumulative = new Chart(document.getElementById('cumulativeChart'), {
+        type: 'line',
+        data: { labels: labels, datasets: [{ label: 'Cumulative Hours', data: data, borderColor: c.green, backgroundColor: c.greenLight, borderWidth: 2.5, pointRadius: 3, pointBackgroundColor: c.green, tension: 0.25, fill: true }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true, grid: { color: c.grid }, ticks: { color: c.text, callback: function(v) { return v + 'h'; } } }, x: { grid: { display: false }, ticks: { color: c.text, font: { size: 11 }, maxTicksLimit: 12 } } } }
+    });
+}
+
+// --- FEED ---
+function buildFeed(sessions) {
+    var list = document.getElementById('feedList');
+    if (sessions.length === 0) {
+        list.innerHTML = '<div class="feed-empty">No sessions logged yet. Add your first session above.</div>';
+        return;
+    }
+    var html = '';
+    sessions.forEach(function(s) {
+        var d = new Date(s.session_date + 'T00:00:00');
+        var ds = d.toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' });
+        html += '<div class="feed-item"><div class="feed-item-left"><div class="feed-dot"></div><div><span class="feed-duration">' + s.duration + ' min</span><div class="feed-time">' + ds + '</div></div></div><button class="btn btn-danger" onclick="deleteSession(' + s.id + ')">Delete</button></div>';
+    });
+    list.innerHTML = html;
+}
+
+// --- REFRESH ALL ---
+async function refreshAll() {
+    var sessions = await loadSessions();
+    updateHeaderStats(sessions);
+    buildWeeklyChart(sessions);
+    buildDailyChart(sessions);
+    buildMonthlyChart(sessions);
+    buildCumulativeChart(sessions);
+    buildFeed(sessions);
+}
+
+// --- INIT ---
+document.getElementById('sessionDate').value = getToday();
+Chart.defaults.font.family = "'DM Sans',system-ui,sans-serif";
+Chart.defaults.color = '#8888a0';
 refreshAll();
 </script>
 </body>
