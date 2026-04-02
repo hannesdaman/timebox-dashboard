@@ -211,13 +211,11 @@ async function deleteSession(id) {
 }
 
 function setStatus(online) {
-    var dot = document.getElementById('statusDot');
     var text = document.getElementById('statusText');
+    if (!text) return;
     if (online) {
-        dot.className = 'status-dot online';
         text.innerHTML = '<span class="status-dot online"></span>Connected to Supabase';
     } else {
-        dot.className = 'status-dot offline';
         text.innerHTML = '<span class="status-dot offline"></span>Offline — check connection';
     }
 }
@@ -409,3 +407,4 @@ refreshAll();
 </script>
 </body>
 </html>
+
