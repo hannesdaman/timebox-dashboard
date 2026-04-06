@@ -1,0 +1,5 @@
+<menu id="TagMenu" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://developer.garmin.com/downloads/connect-iq/resources.xsd">
+    <menu-item id="tag_study"   label="@Strings.tag_study" />
+    <menu-item id="tag_reading" label="@Strings.tag_reading" />
+    <menu-item id="tag_aff"     label="@Strings.tag_aff" />
+</menu>

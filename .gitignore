@@ -1,0 +1,7 @@
+.DS_Store
+watchapp/bin/*.prg
+watchapp/bin/*.prg.debug.xml
+watchapp/bin/external-mir/
+watchapp/bin/gen/
+watchapp/bin/internal-mir/
+watchapp/bin/mir/

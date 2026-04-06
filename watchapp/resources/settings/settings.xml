@@ -1,0 +1,17 @@
+<settings xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://developer.garmin.com/downloads/connect-iq/resources.xsd">
+    <setting propertyKey="@Properties.project1" title="@Strings.setting_project1">
+        <settingConfig type="alphaNumeric" />
+    </setting>
+    <setting propertyKey="@Properties.project2" title="@Strings.setting_project2">
+        <settingConfig type="alphaNumeric" />
+    </setting>
+    <setting propertyKey="@Properties.project3" title="@Strings.setting_project3">
+        <settingConfig type="alphaNumeric" />
+    </setting>
+    <setting propertyKey="@Properties.project4" title="@Strings.setting_project4">
+        <settingConfig type="alphaNumeric" />
+    </setting>
+    <setting propertyKey="@Properties.project5" title="@Strings.setting_project5">
+        <settingConfig type="alphaNumeric" />
+    </setting>
+</settings>

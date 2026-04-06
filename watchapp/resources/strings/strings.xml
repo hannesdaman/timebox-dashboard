@@ -1,0 +1,24 @@
+<strings xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://developer.garmin.com/downloads/connect-iq/resources.xsd">
+    <string id="AppName">TimeBox Stats</string>
+
+    <string id="prompt">Click the menu button</string>
+
+    <string id="menu_label_1">25 min</string>
+    <string id="menu_label_2">50 min</string>
+    <string id="menu_label_3">90 min</string>
+    <string id="menu_label_4">Custom</string>
+
+    <string id="menu_label_5">Stats</string>
+
+    <string id="tag_study">Study</string>
+    <string id="tag_reading">Reading</string>
+    <string id="tag_aff">Aff project</string>
+
+    <string id="setting_project1">Project 1</string>
+    <string id="setting_project2">Project 2</string>
+    <string id="setting_project3">Project 3</string>
+    <string id="setting_project4">Project 4</string>
+    <string id="setting_project5">Project 5</string>
+
+</strings>
+
