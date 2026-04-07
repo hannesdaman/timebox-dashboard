@@ -15,7 +15,13 @@ class TagMenuDelegate extends WatchUi.Menu2InputDelegate {
     }
 
     function onSelect(item) {
-        var idx = item.getId() as Lang.Number;
+        var id = item.getId();
+        if (id == :edit_projects) {
+            ProjectListView.replace(_durationSeconds, _label);
+            return;
+        }
+
+        var idx = id as Lang.Number;
         if (idx < 0 || idx >= _projects.size()) { return; }
         var tag = _projects[idx];
         var v = new TimerView(_durationSeconds, _label, tag);

@@ -23,11 +23,6 @@ class watchappMenuDelegate extends WatchUi.MenuInputDelegate {
     }
 
     private function pushTagMenu(durationSeconds, label) {
-        var projects = getProjects();
-        var menu = new WatchUi.Menu2({:title => "Project"});
-        for (var i = 0; i < projects.size(); i++) {
-            menu.addItem(new WatchUi.MenuItem(projects[i], null, i, null));
-        }
-        WatchUi.pushView(menu, new TagMenuDelegate(durationSeconds, label, projects), WatchUi.SLIDE_UP);
+        showProjectSelectionMenu(durationSeconds, label, false);
     }
 }

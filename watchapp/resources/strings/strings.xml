@@ -10,15 +10,8 @@
 
     <string id="menu_label_5">Stats</string>
 
-    <string id="tag_study">Study</string>
+    <string id="tag_study">Studying</string>
     <string id="tag_reading">Reading</string>
     <string id="tag_aff">Aff project</string>
 
-    <string id="setting_project1">Project 1</string>
-    <string id="setting_project2">Project 2</string>
-    <string id="setting_project3">Project 3</string>
-    <string id="setting_project4">Project 4</string>
-    <string id="setting_project5">Project 5</string>
-
 </strings>
-

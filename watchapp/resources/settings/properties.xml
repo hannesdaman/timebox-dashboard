@@ -1,7 +1,0 @@
-<properties xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://developer.garmin.com/downloads/connect-iq/resources.xsd">
-    <property id="project1" type="string">Study</property>
-    <property id="project2" type="string">Reading</property>
-    <property id="project3" type="string">Aff project</property>
-    <property id="project4" type="string"></property>
-    <property id="project5" type="string"></property>
-</properties>

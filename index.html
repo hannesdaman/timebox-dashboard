@@ -249,14 +249,14 @@ function setStatus(on) {
 
 // ---------- PROJECTS ----------
 // Returns sorted list of project tags that have at least one session.
-// Falls back to ['Study'] if the DB is empty so the dashboard is never blank.
+// Falls back to ['Studying'] if the DB is empty so the dashboard is never blank.
 function getProjectTags(sessions) {
     var seen = {}, tags = [];
     sessions.forEach(function(s) {
         if (s.tag && !seen[s.tag]) { seen[s.tag] = true; tags.push(s.tag); }
     });
     tags.sort();
-    return tags.length > 0 ? tags : ['Study'];
+    return tags.length > 0 ? tags : ['Studying'];
 }
 
 function colorForTag(tag, tags) {
@@ -304,7 +304,7 @@ function syncTagDropdown(tags) {
 async function addSession() {
     var d = document.getElementById('sessionDate').value;
     var m = parseInt(document.getElementById('sessionMinutes').value);
-    var tag = document.getElementById('sessionTag').value || 'Study';
+    var tag = document.getElementById('sessionTag').value || 'Studying';
     if (!d || !m || m < 1) return;
     document.getElementById('addBtn').disabled = true;
     try {

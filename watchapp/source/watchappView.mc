@@ -15,25 +15,33 @@ class watchappView extends WatchUi.View {
     }
 
     function onShow() as Void {
-        // Always go to menu first
-        WatchUi.switchToView(new Rez.Menus.MainMenu(), new watchappMenuDelegate(), WatchUi.SLIDE_UP);
-
-        // If there's a saved session, push timer on top of menu
+        // Real devices can retain stale object-store values across installs.
+        // If resume state is malformed, clear it instead of crashing on launch.
         if (TimerView.hasSavedState()) {
-            var remaining = Storage.getValue("timer_remaining");
-            var total = Storage.getValue("timer_total");
-            var label = Storage.getValue("timer_label");
-            var wasRunning = Storage.getValue("timer_was_running");
-
-            if (remaining != null && total != null && label != null) {
-                if (wasRunning == null) { wasRunning = false; }
+            if (TimerView.hasRestorableState()) {
+                var remaining = Storage.getValue("timer_remaining");
+                var total = Storage.getValue("timer_total");
+                var label = Storage.getValue("timer_label");
+                var wasRunning = Storage.getValue("timer_was_running");
                 var tag = Storage.getValue("timer_tag");
-                if (tag == null) { tag = "Study"; }
-                var v = new TimerView(total, label, tag);
-                v.restoreState(remaining, total, label, wasRunning);
-                WatchUi.pushView(v, new TimerDelegate(v), WatchUi.SLIDE_UP);
+
+                if (wasRunning == null) { wasRunning = false; }
+                if (tag == null) { tag = "Studying"; }
+
+                try {
+                    var v = new TimerView(total, label, tag);
+                    v.restoreState(remaining, total, label, wasRunning);
+                    WatchUi.switchToView(v, new TimerDelegate(v), WatchUi.SLIDE_UP);
+                    return;
+                } catch(e instanceof Lang.Exception) {
+                    TimerView.clearSavedState();
+                }
+            } else {
+                TimerView.clearSavedState();
             }
         }
+
+        WatchUi.switchToView(new Rez.Menus.MainMenu(), new watchappMenuDelegate(), WatchUi.SLIDE_UP);
     }
 
     function onUpdate(dc as Graphics.Dc) as Void {

@@ -114,6 +114,34 @@ class TimerView extends WatchUi.View {
         return (Storage.getValue("timer_remaining") != null);
     }
 
+    static function hasRestorableState() {
+        var remaining = Storage.getValue("timer_remaining");
+        var total = Storage.getValue("timer_total");
+        var label = Storage.getValue("timer_label");
+        var wasRunning = Storage.getValue("timer_was_running");
+        var tag = Storage.getValue("timer_tag");
+
+        var remainingOk = (remaining instanceof Lang.Number) || (remaining instanceof Lang.Long);
+        var totalOk = (total instanceof Lang.Number) || (total instanceof Lang.Long);
+        if (!remainingOk || !totalOk) { return false; }
+        if (!(label instanceof Lang.String)) { return false; }
+        if (wasRunning != null && !(wasRunning instanceof Lang.Boolean)) { return false; }
+        if (tag != null && !(tag instanceof Lang.String)) { return false; }
+
+        var remainingNum = remaining.toNumber();
+        var totalNum = total.toNumber();
+        if (remainingNum < 0 || totalNum <= 0 || remainingNum > totalNum) { return false; }
+
+        if (wasRunning == true) {
+            var savedAt = Storage.getValue("timer_saved_at");
+            if (savedAt != null && !(savedAt instanceof Lang.Number) && !(savedAt instanceof Lang.Long)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private function startTimer() {
         if (_running) { return; }
         _running = true;
@@ -237,7 +265,7 @@ class TimerView extends WatchUi.View {
             dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_BLACK);
 
             dc.drawText(
-                (w * 0.80).toNumber(), (h * 0.32).toNumber(),
+                (w * 0.80).toNumber(), (h * 0.23).toNumber(),
                 Graphics.FONT_XTINY, "START",
                 Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
             );

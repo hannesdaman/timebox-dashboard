@@ -197,6 +197,42 @@ class SessionStore {
     function getMonthMinutesForTag(tag) { return sumPeriod("mins_" + tag, :month); }
     function getYearMinutesForTag(tag) { return sumPeriod("mins_" + tag, :year); }
 
+    function renameTag(oldTag, newTag) {
+        if (oldTag == null || newTag == null || oldTag.equals(newTag)) { return; }
+
+        mergeTagData("mins_" + oldTag, "mins_" + newTag);
+        mergeTagData("boxes_" + oldTag, "boxes_" + newTag);
+
+        var knownTags = Storage.getValue("known_tags");
+        if (knownTags == null) { knownTags = []; }
+
+        var updatedTags = [];
+        for (var i = 0; i < knownTags.size(); i++) {
+            var tag = knownTags[i];
+            if (tag.equals(oldTag)) {
+                if (!arrayContains(updatedTags, newTag)) {
+                    updatedTags.add(newTag);
+                }
+            } else if (!arrayContains(updatedTags, tag)) {
+                updatedTags.add(tag);
+            }
+        }
+        if (!arrayContains(updatedTags, newTag)) {
+            updatedTags.add(newTag);
+        }
+        Storage.setValue("known_tags", updatedTags);
+
+        var lastTag = Storage.getValue("last_tag");
+        if (lastTag != null && lastTag.equals(oldTag)) {
+            Storage.setValue("last_tag", newTag);
+        }
+
+        var timerTag = Storage.getValue("timer_tag");
+        if (timerTag != null && timerTag.equals(oldTag)) {
+            Storage.setValue("timer_tag", newTag);
+        }
+    }
+
     private function sumPeriod(storageKey, period) {
         var data = Storage.getValue(storageKey);
         if (data == null) { return 0; }
@@ -258,5 +294,31 @@ class SessionStore {
         if (changed) {
             Storage.setValue(storageKey, data);
         }
+    }
+
+    private function mergeTagData(oldKey, newKey) {
+        var oldData = Storage.getValue(oldKey);
+        if (oldData == null) { return; }
+
+        var newData = Storage.getValue(newKey);
+        if (newData == null) { newData = {}; }
+
+        var keys = oldData.keys();
+        for (var i = 0; i < keys.size(); i++) {
+            var key = keys[i];
+            var current = 0;
+            if (newData.hasKey(key)) { current = newData[key]; }
+            newData.put(key, current + oldData[key]);
+        }
+
+        Storage.setValue(newKey, newData);
+        Storage.deleteValue(oldKey);
+    }
+
+    private function arrayContains(values, target) {
+        for (var i = 0; i < values.size(); i++) {
+            if (values[i].equals(target)) { return true; }
+        }
+        return false;
     }
 }

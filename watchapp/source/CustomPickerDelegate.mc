@@ -25,12 +25,7 @@ class CustomPickerDelegate extends WatchUi.BehaviorDelegate {
     function onSelect() {
         var mins = _view.getMinutes();
         var label = "" + mins + " min";
-        var projects = getProjects();
-        var menu = new WatchUi.Menu2({:title => "Project"});
-        for (var i = 0; i < projects.size(); i++) {
-            menu.addItem(new WatchUi.MenuItem(projects[i], null, i, null));
-        }
-        WatchUi.switchToView(menu, new TagMenuDelegate(mins * 60, label, projects), WatchUi.SLIDE_UP);
+        showProjectSelectionMenu(mins * 60, label, true);
         return true;
     }
 

@@ -14,7 +14,7 @@ class StatsView extends WatchUi.View {
         View.initialize();
         _store = new SessionStore();
         _messageTimer = new Timer.Timer();
-        // Build ["All", project1, project2, ...] from app settings
+        // Build ["All", project1, project2, ...] from on-watch project storage
         _tags = ["All"];
         var projects = getProjects();
         for (var i = 0; i < projects.size(); i++) {

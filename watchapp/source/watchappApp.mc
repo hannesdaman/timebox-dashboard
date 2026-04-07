@@ -3,6 +3,7 @@ import Toybox.Lang;
 import Toybox.WatchUi;
 import Toybox.Communications;
 import Toybox.System;
+import Toybox.Application.Storage;
 
 class watchappApp extends Application.AppBase {
 
@@ -19,8 +20,38 @@ class watchappApp extends Application.AppBase {
     function onStop(state as Dictionary?) as Void {
     }
 
+    function onSettingsChanged() as Void {
+    }
+
     function getInitialView() as [Views] or [Views, InputDelegates] {
-        return [ new watchappView(), new watchappDelegate() ];
+        if (isFirstLaunch()) {
+            return [ new WelcomeView(), new WelcomeDelegate() ];
+        }
+
+        if (TimerView.hasSavedState()) {
+            if (TimerView.hasRestorableState()) {
+                var remaining = Storage.getValue("timer_remaining");
+                var total = Storage.getValue("timer_total");
+                var label = Storage.getValue("timer_label");
+                var wasRunning = Storage.getValue("timer_was_running");
+                var tag = Storage.getValue("timer_tag");
+
+                if (wasRunning == null) { wasRunning = false; }
+                if (tag == null) { tag = "Studying"; }
+
+                try {
+                    var timerView = new TimerView(total, label, tag);
+                    timerView.restoreState(remaining, total, label, wasRunning);
+                    return [ timerView, new TimerDelegate(timerView) ];
+                } catch(e instanceof Lang.Exception) {
+                    TimerView.clearSavedState();
+                }
+            } else {
+                TimerView.clearSavedState();
+            }
+        }
+
+        return [ new Rez.Menus.MainMenu(), new watchappMenuDelegate() ];
     }
 
     function syncSession(durationMinutes, dateKey, tag) {
@@ -59,21 +90,137 @@ function getApp() as watchappApp {
     return Application.getApp() as watchappApp;
 }
 
-// Returns the list of active project names from app settings.
-// Empty slots are skipped. Falls back to ["Study"] if nothing is configured.
-function getProjects() as Lang.Array {
-    var projects = [];
-    var keys = ["project1", "project2", "project3", "project4", "project5"];
-    for (var i = 0; i < keys.size(); i++) {
-        try {
-            var p = Application.Properties.getValue(keys[i]);
-            if (p instanceof Lang.String && !(p as Lang.String).equals("")) {
-                projects.add(p);
+function getGenericProjectOptions() as Lang.Array {
+    return [
+        "Studying",
+        "Reading",
+        "Writing",
+        "Coding",
+        "Research",
+        "Exercise",
+        "Planning",
+        "Language",
+        "Music",
+        "Work"
+    ];
+}
+
+function normalizeProjectName(name) as Lang.String or Null {
+    if (!(name instanceof Lang.String)) { return null; }
+
+    var trimmed = trimProjectName(name as Lang.String);
+    if (trimmed.length() == 0) { return null; }
+
+    var first = trimmed.substring(0, 1).toUpper();
+    if (trimmed.length() == 1) { return first; }
+
+    return first + trimmed.substring(1, trimmed.length()).toLower();
+}
+
+function trimProjectName(value as Lang.String) as Lang.String {
+    var start = 0;
+    var finish = value.length();
+
+    while (start < finish && isProjectWhitespace(value.substring(start, start + 1))) {
+        start += 1;
+    }
+
+    while (finish > start && isProjectWhitespace(value.substring(finish - 1, finish))) {
+        finish -= 1;
+    }
+
+    return value.substring(start, finish);
+}
+
+function isProjectWhitespace(character as Lang.String) as Lang.Boolean {
+    return character.equals(" ") ||
+        character.equals("\t") ||
+        character.equals("\n") ||
+        character.equals("\r");
+}
+
+function copyProjects(projects) as Lang.Array {
+    var copy = [];
+    if (!(projects instanceof Lang.Array)) { return copy; }
+
+    for (var i = 0; i < projects.size(); i++) {
+        copy.add(projects[i]);
+    }
+
+    return copy;
+}
+
+function projectArrayContains(projects, name) as Lang.Boolean {
+    if (!(projects instanceof Lang.Array) || !(name instanceof Lang.String)) { return false; }
+
+    for (var i = 0; i < projects.size(); i++) {
+        if (projects[i] instanceof Lang.String && projects[i].equals(name)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function projectArrayContainsExcept(projects, name, skipIndex) as Lang.Boolean {
+    if (!(projects instanceof Lang.Array) || !(name instanceof Lang.String)) { return false; }
+
+    for (var i = 0; i < projects.size(); i++) {
+        if (i == skipIndex) { continue; }
+        if (projects[i] instanceof Lang.String && projects[i].equals(name)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function normalizeProjectList(projects) as Lang.Array {
+    var normalized = [];
+    if (!(projects instanceof Lang.Array)) { return normalized; }
+
+    for (var i = 0; i < projects.size(); i++) {
+        var project = normalizeProjectName(projects[i]);
+        if (project != null && !projectArrayContains(normalized, project)) {
+            normalized.add(project);
+            if (normalized.size() >= 5) {
+                break;
             }
-        } catch(e instanceof Lang.Exception) {}
+        }
     }
-    if (projects.size() == 0) {
-        projects.add("Study");
+
+    return normalized;
+}
+
+function getProjects() as Lang.Array {
+    return normalizeProjectList(Storage.getValue("projects"));
+}
+
+function saveProjects(projects) as Void {
+    Storage.setValue("projects", normalizeProjectList(projects));
+}
+
+function isFirstLaunch() as Lang.Boolean {
+    return (Storage.getValue("setup_done") == null && getProjects().size() == 0);
+}
+
+function markSetupDone() as Void {
+    Storage.setValue("setup_done", true);
+}
+
+function showProjectSelectionMenu(durationSeconds, label, replaceCurrent as Lang.Boolean) as Void {
+    var projects = getProjects();
+    var menu = new WatchUi.Menu2({ :title => "Project" });
+
+    for (var i = 0; i < projects.size(); i++) {
+        menu.addItem(new WatchUi.MenuItem(projects[i], null, i, null));
     }
-    return projects;
+
+    menu.addItem(new WatchUi.MenuItem("EDIT PROJECTS", "Add, rename or delete", :edit_projects, null));
+
+    if (replaceCurrent) {
+        WatchUi.switchToView(menu, new TagMenuDelegate(durationSeconds, label, projects), WatchUi.SLIDE_IMMEDIATE);
+    } else {
+        WatchUi.pushView(menu, new TagMenuDelegate(durationSeconds, label, projects), WatchUi.SLIDE_UP);
+    }
 }
