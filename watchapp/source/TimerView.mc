@@ -158,6 +158,10 @@ class TimerView extends WatchUi.View {
             var vibeData = [
                 new Attention.VibeProfile(50, 300),
                 new Attention.VibeProfile(0, 150),
+                new Attention.VibeProfile(50, 300),
+                new Attention.VibeProfile(0, 150),
+                new Attention.VibeProfile(50, 300),
+                new Attention.VibeProfile(0, 150),
                 new Attention.VibeProfile(50, 300)
             ];
             Attention.vibrate(vibeData);

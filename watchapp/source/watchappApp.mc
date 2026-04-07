@@ -77,11 +77,36 @@ class watchappApp extends Application.AppBase {
         Communications.makeWebRequest(SUPABASE_URL, payload, options, method(:onSyncResponse));
     }
 
+    function deleteSessionsForDate(dateKey) {
+        var dateStr = formatDateKey(dateKey);
+        var url = SUPABASE_URL + "?session_date=eq." + dateStr;
+
+        var options = {
+            :method => Communications.HTTP_REQUEST_METHOD_DELETE,
+            :headers => {
+                "apikey" => SUPABASE_KEY,
+                "Authorization" => "Bearer " + SUPABASE_KEY,
+                "Prefer" => "return=minimal"
+            },
+            :responseType => Communications.HTTP_RESPONSE_CONTENT_TYPE_JSON
+        };
+
+        Communications.makeWebRequest(url, null, options, method(:onDeleteResponse));
+    }
+
     function onSyncResponse(responseCode as Lang.Number, data as Lang.Dictionary or Lang.String or Null) as Void {
         if (responseCode == 201 || responseCode == 200) {
             System.println("Sync OK");
         } else {
             System.println("Sync FAILED: " + responseCode);
+        }
+    }
+
+    function onDeleteResponse(responseCode as Lang.Number, data as Lang.Dictionary or Lang.String or Null) as Void {
+        if (responseCode == 204 || responseCode == 200) {
+            System.println("Delete sync OK");
+        } else {
+            System.println("Delete sync FAILED: " + responseCode);
         }
     }
 }

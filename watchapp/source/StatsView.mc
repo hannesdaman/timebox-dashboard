@@ -32,7 +32,9 @@ class StatsView extends WatchUi.View {
     }
 
     function resetToday() {
+        var today = _store.todayKey();
         _store.clearToday();
+        getApp().deleteSessionsForDate(today);
         _message = "Today reset!";
         WatchUi.requestUpdate();
         _messageTimer.start(method(:onMessageTimeout), 2000, false);
