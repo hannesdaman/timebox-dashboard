@@ -36,9 +36,9 @@ class StatsDelegate extends WatchUi.BehaviorDelegate {
 class ResetTodayConfirmView {
 
     static function show(statsView) {
-        var menu = new WatchUi.Menu2({ :title => "Reset today?" });
-        menu.addItem(new WatchUi.MenuItem("Yes", "Erase all logged sessions from today", :confirm_yes, null));
-        menu.addItem(new WatchUi.MenuItem("No", "Keep today's logged sessions", :confirm_no, null));
+        var menu = new WatchUi.Menu2({ :title => "Delete today's sessions?" });
+        menu.addItem(new WatchUi.MenuItem("Yes", "Today only", :confirm_yes, null));
+        menu.addItem(new WatchUi.MenuItem("No", "Keep all sessions", :confirm_no, null));
         WatchUi.pushView(menu, new ResetTodayConfirmDelegate(statsView), WatchUi.SLIDE_UP);
     }
 }
