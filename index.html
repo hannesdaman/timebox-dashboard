@@ -190,7 +190,7 @@ h1 span { color: var(--text-dim); font-weight: 300; }
     <div class="heatmap-section">
         <h3 id="heatmapTitle">Activity — Last 16 Weeks</h3>
         <div style="display:flex;">
-            <div class="heatmap-day-labels"><span></span><span>Sat</span><span>Fri</span><span></span><span>Wed</span><span></span><span>Mon</span></div>
+            <div class="heatmap-day-labels"><span>Mon</span><span></span><span>Wed</span><span></span><span>Fri</span><span></span><span>Sun</span></div>
             <div class="heatmap-grid" id="heatmapGrid"></div>
         </div>
         <div class="heatmap-legend"><span>Less</span><div class="heatmap-cell"></div><div class="heatmap-cell l1"></div><div class="heatmap-cell l2"></div><div class="heatmap-cell l3"></div><div class="heatmap-cell l4"></div><span>More</span></div>
@@ -431,7 +431,6 @@ function buildHeatmap(sessions) {
     var d = new Date(start);
     while (d <= today) {
         var col = document.createElement('div'); col.className = 'heatmap-col';
-        var cells = [];
         for (var r = 0; r < 7; r++) {
             var cell = document.createElement('div'); cell.className = 'heatmap-cell';
             if (d <= today) {
@@ -442,9 +441,8 @@ function buildHeatmap(sessions) {
                 else if (mins >= 360) cell.className = 'heatmap-cell l4';
                 cell.title = key + ': ' + mins + ' min';
             }
-            cells.push(cell); d.setDate(d.getDate() + 1);
+            col.appendChild(cell); d.setDate(d.getDate() + 1);
         }
-        for (var r = 6; r >= 0; r--) { col.appendChild(cells[r]); }
         grid.appendChild(col);
     }
     document.getElementById('heatmapTitle').textContent = (currentTag === 'All' ? 'Activity' : currentTag) + ' — Last 16 Weeks';
