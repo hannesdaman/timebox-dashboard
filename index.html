@@ -174,8 +174,8 @@ h1 span { color: var(--text-dim); font-weight: 300; }
     <div class="goal-section">
         <div class="goal-header">
             <h3>Weekly Goal</h3>
-            <div class="goal-edit">
-                <input type="number" id="goalHrs" value="30" min="0" max="80" onchange="saveGoal(); renderAll(allSessions)">
+            <div class="goal-edit" id="goalEditWrap">
+                <input type="number" id="goalHrs" value="0" min="0" max="80" onchange="saveGoal(); renderAll(allSessions)">
                 <label>h</label>
                 <input type="number" id="goalMins" value="0" min="0" max="59" step="5" onchange="saveGoal(); renderAll(allSessions)">
                 <label>m /wk</label>
@@ -283,15 +283,33 @@ function colorForTag(tag, tags) {
 }
 
 // ---------- PER-PROJECT GOALS ----------
-function goalKey() { return 'weeklyGoal_' + currentTag; }
+function goalKeyFor(tag) { return 'weeklyGoal_' + tag; }
+function goalKey() { return goalKeyFor(currentTag); }
+function getGoalMinsFor(tag) {
+    var v = localStorage.getItem(goalKeyFor(tag));
+    return v ? parseFloat(v) : 0;
+}
 function getGoalHours() {
+    if (currentTag === 'All') {
+        // Sum all per-project goals
+        var tags = getProjectTags(allSessions);
+        var total = 0;
+        for (var i = 0; i < tags.length; i++) { total += getGoalMinsFor(tags[i]); }
+        return total / 60;
+    }
     var h = parseInt(document.getElementById('goalHrs').value) || 0;
     var m = parseInt(document.getElementById('goalMins').value) || 0;
     return h + m / 60;
 }
 function loadGoal() {
+    var edit = document.getElementById('goalEditWrap');
+    if (currentTag === 'All') {
+        edit.style.display = 'none';
+        return;
+    }
+    edit.style.display = 'flex';
     var v = localStorage.getItem(goalKey());
-    var totalMins = v ? parseFloat(v) : 1800; // stored as minutes, default 30h
+    var totalMins = v ? parseFloat(v) : 0;
     var h = Math.floor(totalMins / 60);
     var m = Math.round(totalMins % 60);
     document.getElementById('goalHrs').value = h;
