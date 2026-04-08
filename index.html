@@ -54,19 +54,26 @@ h1 span { color: var(--text-dim); font-weight: 300; }
 .stat-value.orange { color: var(--orange); }
 .stat-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1.5px; margin-top: 6px; }
 
-/* Goal bar */
-.goal-section { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 24px; margin-bottom: 32px; }
-.goal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+/* Goal section */
+.goal-section { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 28px 32px; margin-bottom: 32px; }
+.goal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
 .goal-header h3 { font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-dim); }
-.goal-numbers { font-family: var(--mono); font-size: 14px; color: var(--text); }
-.goal-numbers span { color: var(--green); font-weight: 600; }
-.goal-bar-bg { background: var(--surface-2); border-radius: 10px; height: 20px; overflow: hidden; }
-.goal-bar-fill { height: 100%; border-radius: 10px; transition: width 0.6s ease; background: linear-gradient(90deg, var(--accent), var(--green)); }
-.goal-bar-fill.over { background: linear-gradient(90deg, var(--green), #55efc4); }
 .goal-edit { display: flex; align-items: center; gap: 8px; }
 .goal-edit input { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; color: var(--text); font-family: var(--mono); font-size: 13px; width: 54px; text-align: center; outline: none; transition: all 0.2s; }
 .goal-edit input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
 .goal-edit label { font-size: 12px; color: var(--text-dim); }
+.goal-weeks { display: flex; flex-direction: column; gap: 14px; }
+.goal-week { display: flex; align-items: center; gap: 16px; }
+.goal-week-label { font-size: 12px; color: var(--text-dim); width: 80px; flex-shrink: 0; white-space: nowrap; }
+.goal-week.current .goal-week-label { color: var(--text); font-weight: 600; }
+.goal-bar-track { flex: 1; background: var(--surface-2); border-radius: 10px; height: 28px; position: relative; }
+.goal-week.past .goal-bar-track { height: 22px; opacity: 0.7; }
+.goal-bar-fill { height: 100%; border-radius: 10px; transition: width 0.6s ease; background: linear-gradient(90deg, var(--accent), var(--green)); position: absolute; top: 0; left: 0; display: flex; align-items: center; justify-content: flex-end; }
+.goal-bar-fill.over { background: linear-gradient(90deg, var(--green), #55efc4); box-shadow: 0 0 20px rgba(0, 184, 148, 0.2); }
+.goal-pct { padding-right: 10px; font-family: var(--mono); font-size: 11px; font-weight: 600; color: white; text-shadow: 0 1px 3px rgba(0,0,0,0.5); white-space: nowrap; }
+.goal-pct.outside { position: absolute; left: calc(var(--fill-w, 0%) + 8px); top: 50%; transform: translateY(-50%); color: var(--text-dim); text-shadow: none; font-family: var(--mono); font-size: 11px; font-weight: 600; padding: 0; }
+.goal-week-hrs { font-family: var(--mono); font-size: 12px; color: var(--text-dim); width: 70px; text-align: right; flex-shrink: 0; }
+.goal-week.current .goal-week-hrs { color: var(--green); font-weight: 600; }
 
 /* Records */
 .records-row { display: flex; gap: 16px; margin-bottom: 32px; flex-wrap: wrap; }
@@ -167,17 +174,14 @@ h1 span { color: var(--text-dim); font-weight: 300; }
     <div class="goal-section">
         <div class="goal-header">
             <h3>Weekly Goal</h3>
-            <div style="display:flex;align-items:center;gap:16px;">
-                <div class="goal-numbers"><span id="goalCurrent">0</span> / <span id="goalTarget">30</span> hrs</div>
-                <div class="goal-edit">
-                    <input type="number" id="goalHrs" value="30" min="0" max="80" onchange="saveGoal(); renderAll(allSessions)">
-                    <label>h</label>
-                    <input type="number" id="goalMins" value="0" min="0" max="59" step="5" onchange="saveGoal(); renderAll(allSessions)">
-                    <label>m /wk</label>
-                </div>
+            <div class="goal-edit">
+                <input type="number" id="goalHrs" value="30" min="0" max="80" onchange="saveGoal(); renderAll(allSessions)">
+                <label>h</label>
+                <input type="number" id="goalMins" value="0" min="0" max="59" step="5" onchange="saveGoal(); renderAll(allSessions)">
+                <label>m /wk</label>
             </div>
         </div>
-        <div class="goal-bar-bg"><div class="goal-bar-fill" id="goalBar" style="width:0%"></div></div>
+        <div class="goal-weeks" id="goalWeeks"></div>
     </div>
 
     <div class="records-row">
@@ -402,14 +406,42 @@ function updateStats(sessions) {
 
     var goal = getGoalHours();
     if (goal <= 0) goal = 1;
-    var goalHrs = Math.round(wm / 60 * 10) / 10;
-    var goalDisplay = goal === Math.floor(goal) ? goal.toString() : (Math.round(goal * 10) / 10).toString();
-    document.getElementById('goalCurrent').textContent = goalHrs;
-    document.getElementById('goalTarget').textContent = goalDisplay;
-    var pct = Math.min((wm / 60) / goal * 100, 100);
-    var bar = document.getElementById('goalBar');
-    bar.style.width = pct + '%';
-    bar.className = pct >= 100 ? 'goal-bar-fill over' : 'goal-bar-fill';
+    // Build 4-week goal bars (current + 3 previous)
+    var bw = sumByWeek(sessions);
+    var weekStarts = [];
+    var d = new Date(ws + 'T00:00:00');
+    for (var wi = 0; wi < 4; wi++) {
+        weekStarts.push(d.toISOString().split('T')[0]);
+        d.setDate(d.getDate() - 7);
+    }
+    var container = document.getElementById('goalWeeks');
+    container.innerHTML = '';
+    for (var wi = 0; wi < weekStarts.length; wi++) {
+        var wk = weekStarts[wi];
+        var mins = 0;
+        Object.keys(bd).forEach(function(dd) { if (getWeekStart(dd) === wk) mins += bd[dd]; });
+        var hrs = Math.round(mins / 60 * 10) / 10;
+        var pct = goal > 0 ? Math.round((mins / 60) / goal * 100) : 0;
+        var cappedPct = Math.min(pct, 100);
+        var isCurrent = wi === 0;
+        var wDate = new Date(wk + 'T00:00:00');
+        var label = isCurrent ? 'This week' : wDate.toLocaleDateString('en', { month: 'short', day: 'numeric' });
+
+        var row = document.createElement('div');
+        row.className = 'goal-week' + (isCurrent ? ' current' : ' past');
+
+        var pctInside = cappedPct >= 25;
+        row.innerHTML =
+            '<div class="goal-week-label">' + label + '</div>' +
+            '<div class="goal-bar-track">' +
+                '<div class="goal-bar-fill' + (pct >= 100 ? ' over' : '') + '" style="width:' + cappedPct + '%">' +
+                    (pctInside ? '<span class="goal-pct">' + pct + '%</span>' : '') +
+                '</div>' +
+                (!pctInside && mins > 0 ? '<span class="goal-pct outside" style="left:' + (cappedPct + 2) + '%">' + pct + '%</span>' : '') +
+            '</div>' +
+            '<div class="goal-week-hrs">' + hrs + ' hrs</div>';
+        container.appendChild(row);
+    }
 
     var bw = sumByWeek(sessions);
     var bestDV = 0, bestDK = '', bestWV = 0, bestWK = '';
