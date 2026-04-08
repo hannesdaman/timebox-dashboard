@@ -64,7 +64,7 @@ h1 span { color: var(--text-dim); font-weight: 300; }
 .goal-edit label { font-size: 12px; color: var(--text-dim); }
 .goal-weeks { display: flex; flex-direction: column; gap: 14px; }
 .goal-week { display: flex; align-items: center; gap: 16px; }
-.goal-week-label { font-size: 12px; color: var(--text-dim); width: 80px; flex-shrink: 0; white-space: nowrap; }
+.goal-week-label { font-size: 12px; color: var(--text-dim); width: 130px; flex-shrink: 0; white-space: nowrap; }
 .goal-week.current .goal-week-label { color: var(--text); font-weight: 600; }
 .goal-bar-track { flex: 1; background: var(--surface-2); border-radius: 10px; height: 28px; position: relative; }
 .goal-week.past .goal-bar-track { height: 22px; opacity: 0.7; }
@@ -407,12 +407,12 @@ function updateStats(sessions) {
     var goal = getGoalHours();
     if (goal <= 0) goal = 1;
     // Build 4-week goal bars (current + 3 previous)
-    var bw = sumByWeek(sessions);
+    // Use getWeekStart consistently to avoid timezone double-shift
     var weekStarts = [];
-    var d = new Date(ws + 'T00:00:00');
+    var ref = new Date(today + 'T12:00:00');
     for (var wi = 0; wi < 4; wi++) {
-        weekStarts.push(d.toISOString().split('T')[0]);
-        d.setDate(d.getDate() - 7);
+        weekStarts.push(getWeekStart(ref.toISOString().split('T')[0]));
+        ref.setDate(ref.getDate() - 7);
     }
     var container = document.getElementById('goalWeeks');
     container.innerHTML = '';
@@ -424,8 +424,14 @@ function updateStats(sessions) {
         var pct = goal > 0 ? Math.round((mins / 60) / goal * 100) : 0;
         var cappedPct = Math.min(pct, 100);
         var isCurrent = wi === 0;
-        var wDate = new Date(wk + 'T00:00:00');
-        var label = isCurrent ? 'This week' : wDate.toLocaleDateString('en', { month: 'short', day: 'numeric' });
+
+        // Date range label: Mon – Sun
+        var monDate = new Date(wk + 'T12:00:00');
+        var sunDate = new Date(wk + 'T12:00:00');
+        sunDate.setDate(sunDate.getDate() + 6);
+        var monStr = monDate.toLocaleDateString('en', { month: 'short', day: 'numeric' });
+        var sunStr = sunDate.toLocaleDateString('en', { month: 'short', day: 'numeric' });
+        var label = isCurrent ? 'This week' : monStr + ' – ' + sunStr;
 
         var row = document.createElement('div');
         row.className = 'goal-week' + (isCurrent ? ' current' : ' past');
