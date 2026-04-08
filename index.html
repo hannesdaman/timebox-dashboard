@@ -169,7 +169,12 @@ h1 span { color: var(--text-dim); font-weight: 300; }
             <h3>Weekly Goal</h3>
             <div style="display:flex;align-items:center;gap:16px;">
                 <div class="goal-numbers"><span id="goalCurrent">0</span> / <span id="goalTarget">30</span> hrs</div>
-                <div class="goal-edit"><input type="number" id="goalInput" value="30" min="1" max="80" onchange="saveGoal(); renderAll(allSessions)"><label>hrs/wk</label></div>
+                <div class="goal-edit">
+                    <input type="number" id="goalHrs" value="30" min="0" max="80" onchange="saveGoal(); renderAll(allSessions)">
+                    <label>h</label>
+                    <input type="number" id="goalMins" value="0" min="0" max="59" step="5" onchange="saveGoal(); renderAll(allSessions)">
+                    <label>m /wk</label>
+                </div>
             </div>
         </div>
         <div class="goal-bar-bg"><div class="goal-bar-fill" id="goalBar" style="width:0%"></div></div>
@@ -185,7 +190,7 @@ h1 span { color: var(--text-dim); font-weight: 300; }
     <div class="heatmap-section">
         <h3 id="heatmapTitle">Activity — Last 16 Weeks</h3>
         <div style="display:flex;">
-            <div class="heatmap-day-labels"><span></span><span>Mon</span><span></span><span>Wed</span><span></span><span>Fri</span><span></span></div>
+            <div class="heatmap-day-labels"><span></span><span>Sat</span><span>Fri</span><span></span><span>Wed</span><span></span><span>Mon</span></div>
             <div class="heatmap-grid" id="heatmapGrid"></div>
         </div>
         <div class="heatmap-legend"><span>Less</span><div class="heatmap-cell"></div><div class="heatmap-cell l1"></div><div class="heatmap-cell l2"></div><div class="heatmap-cell l3"></div><div class="heatmap-cell l4"></div><span>More</span></div>
@@ -275,13 +280,23 @@ function colorForTag(tag, tags) {
 
 // ---------- PER-PROJECT GOALS ----------
 function goalKey() { return 'weeklyGoal_' + currentTag; }
+function getGoalHours() {
+    var h = parseInt(document.getElementById('goalHrs').value) || 0;
+    var m = parseInt(document.getElementById('goalMins').value) || 0;
+    return h + m / 60;
+}
 function loadGoal() {
     var v = localStorage.getItem(goalKey());
-    var inp = document.getElementById('goalInput');
-    inp.value = v ? v : 30;
+    var totalMins = v ? parseFloat(v) : 1800; // stored as minutes, default 30h
+    var h = Math.floor(totalMins / 60);
+    var m = Math.round(totalMins % 60);
+    document.getElementById('goalHrs').value = h;
+    document.getElementById('goalMins').value = m;
 }
 function saveGoal() {
-    localStorage.setItem(goalKey(), document.getElementById('goalInput').value);
+    var h = parseInt(document.getElementById('goalHrs').value) || 0;
+    var m = parseInt(document.getElementById('goalMins').value) || 0;
+    localStorage.setItem(goalKey(), h * 60 + m);
 }
 
 // ---------- TABS ----------
@@ -290,13 +305,14 @@ function buildTabs(sessions) {
     var tabBar = document.getElementById('tabBar');
     tabBar.innerHTML = '';
 
-    ['All'].concat(tags).forEach(function(label) {
+    tags.concat(['All']).forEach(function(label) {
         var el = document.createElement('button');
         el.className = 'tab' + (label === currentTag ? ' active' : '');
         el.textContent = label;
         if (label === currentTag && label !== 'All') {
             el.style.background = colorForTag(label, tags);
         }
+        if (label === 'All') { el.style.marginLeft = 'auto'; }
         el.onclick = function() {
             currentTag = label;
             loadGoal();
@@ -384,10 +400,12 @@ function updateStats(sessions) {
     document.getElementById('avgPerDay').textContent = (days > 0 ? Math.round(allMin / days) : 0) + ' min';
     document.getElementById('streakCount').textContent = getStreak(sessions);
 
-    var goal = parseInt(document.getElementById('goalInput').value) || 30;
+    var goal = getGoalHours();
+    if (goal <= 0) goal = 1;
     var goalHrs = Math.round(wm / 60 * 10) / 10;
+    var goalDisplay = goal === Math.floor(goal) ? goal.toString() : (Math.round(goal * 10) / 10).toString();
     document.getElementById('goalCurrent').textContent = goalHrs;
-    document.getElementById('goalTarget').textContent = goal;
+    document.getElementById('goalTarget').textContent = goalDisplay;
     var pct = Math.min((wm / 60) / goal * 100, 100);
     var bar = document.getElementById('goalBar');
     bar.style.width = pct + '%';
@@ -413,6 +431,7 @@ function buildHeatmap(sessions) {
     var d = new Date(start);
     while (d <= today) {
         var col = document.createElement('div'); col.className = 'heatmap-col';
+        var cells = [];
         for (var r = 0; r < 7; r++) {
             var cell = document.createElement('div'); cell.className = 'heatmap-cell';
             if (d <= today) {
@@ -423,8 +442,9 @@ function buildHeatmap(sessions) {
                 else if (mins >= 360) cell.className = 'heatmap-cell l4';
                 cell.title = key + ': ' + mins + ' min';
             }
-            col.appendChild(cell); d.setDate(d.getDate() + 1);
+            cells.push(cell); d.setDate(d.getDate() + 1);
         }
+        for (var r = 6; r >= 0; r--) { col.appendChild(cells[r]); }
         grid.appendChild(col);
     }
     document.getElementById('heatmapTitle').textContent = (currentTag === 'All' ? 'Activity' : currentTag) + ' — Last 16 Weeks';
