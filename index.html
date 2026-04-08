@@ -160,7 +160,7 @@ h1 span { color: var(--text-dim); font-weight: 300; }
             <h3>Weekly Goal</h3>
             <div style="display:flex;align-items:center;gap:16px;">
                 <div class="goal-numbers"><span id="goalCurrent">0</span> / <span id="goalTarget">30</span> hrs</div>
-                <div class="goal-edit"><input type="number" id="goalInput" value="30" min="1" max="80" onchange="renderAll(allSessions)"><label>hrs/wk</label></div>
+                <div class="goal-edit"><input type="number" id="goalInput" value="30" min="1" max="80" onchange="saveGoal(); renderAll(allSessions)"><label>hrs/wk</label></div>
             </div>
         </div>
         <div class="goal-bar-bg"><div class="goal-bar-fill" id="goalBar" style="width:0%"></div></div>
@@ -264,6 +264,17 @@ function colorForTag(tag, tags) {
     return idx >= 0 ? PROJECT_COLORS[idx % PROJECT_COLORS.length] : PROJECT_COLORS[0];
 }
 
+// ---------- PER-PROJECT GOALS ----------
+function goalKey() { return 'weeklyGoal_' + currentTag; }
+function loadGoal() {
+    var v = localStorage.getItem(goalKey());
+    var inp = document.getElementById('goalInput');
+    inp.value = v ? v : 30;
+}
+function saveGoal() {
+    localStorage.setItem(goalKey(), document.getElementById('goalInput').value);
+}
+
 // ---------- TABS ----------
 function buildTabs(sessions) {
     var tags = getProjectTags(sessions);
@@ -279,7 +290,8 @@ function buildTabs(sessions) {
         }
         el.onclick = function() {
             currentTag = label;
-            buildTabs(sessions); // re-render tabs with new active
+            loadGoal();
+            buildTabs(sessions);
             syncTagDropdown(tags);
             renderAll(allSessions);
         };
@@ -504,6 +516,7 @@ async function refreshAll() {
 document.getElementById('sessionDate').value = getToday();
 Chart.defaults.font.family = "'DM Sans',system-ui,sans-serif";
 Chart.defaults.color = '#8888a0';
+loadGoal();
 refreshAll();
 </script>
 </body>

@@ -1,49 +1,66 @@
 import Toybox.WatchUi;
 import Toybox.Lang;
+import Toybox.Timer;
+
+// Shared onboarding selection state — survives even if switchToView
+// fails during TextPicker auto-dismiss animation on real hardware.
+var gOnboardingSelected = [] as Lang.Array;
 
 class OnboardingPickerDelegate extends WatchUi.Menu2InputDelegate {
 
-    private var _selected;
-
     function initialize(selectedProjects) {
         Menu2InputDelegate.initialize();
-        _selected = normalizeProjectList(copyProjects(selectedProjects));
+        gOnboardingSelected = normalizeProjectList(copyProjects(selectedProjects));
     }
 
     function onSelect(item) {
         var id = item.getId();
 
         if (id == :add_custom) {
-            if (_selected.size() >= 5) {
-                OnboardingPickerView.show(_selected, "Max 5 projects");
+            if (gOnboardingSelected.size() >= 5) {
+                OnboardingPickerView.show(gOnboardingSelected, "Max 5 projects");
                 return;
             }
 
             WatchUi.pushView(
                 new WatchUi.TextPicker(""),
-                new OnboardingCustomTextDelegate(_selected),
+                new OnboardingCustomTextDelegate(),
                 WatchUi.SLIDE_UP
             );
             return;
         }
 
         if (id == :save_projects) {
-            if (_selected.size() == 0) {
-                OnboardingPickerView.show(_selected, "Pick at least 1");
+            if (gOnboardingSelected.size() == 0) {
+                OnboardingPickerView.show(gOnboardingSelected, "Pick at least 1");
                 return;
             }
 
-            saveProjects(_selected);
+            saveProjects(gOnboardingSelected);
             markSetupDone();
             WatchUi.switchToView(new SetupDoneView(), new SetupDoneDelegate(), WatchUi.SLIDE_UP);
             return;
         }
 
+        // Custom project tap — id is a String
+        if (id instanceof Lang.String) {
+            var remaining = [];
+            for (var i = 0; i < gOnboardingSelected.size(); i++) {
+                if (!gOnboardingSelected[i].equals(id)) {
+                    remaining.add(gOnboardingSelected[i]);
+                }
+            }
+            gOnboardingSelected = remaining;
+            OnboardingPickerView.show(gOnboardingSelected, null);
+            return;
+        }
+
+        // Preset toggle
         var presetIndex = id as Lang.Number;
         var presets = getGenericProjectOptions();
         if (presetIndex < 0 || presetIndex >= presets.size()) { return; }
 
-        var updated = copyProjects(_selected);
+        var updated = copyProjects(gOnboardingSelected);
         var presetName = presets[presetIndex];
 
         if (projectArrayContains(updated, presetName)) {
@@ -68,30 +85,33 @@ class OnboardingPickerDelegate extends WatchUi.Menu2InputDelegate {
 
 class OnboardingCustomTextDelegate extends WatchUi.TextPickerDelegate {
 
-    private var _selected;
+    // Timer must be stored as instance var to prevent GC before it fires
+    private var _refreshTimer;
 
-    function initialize(selectedProjects) {
+    function initialize() {
         TextPickerDelegate.initialize();
-        _selected = normalizeProjectList(copyProjects(selectedProjects));
     }
 
     function onTextEntered(text, changed) {
-        var updated = copyProjects(_selected);
         var normalized = normalizeProjectName(text);
 
-        WatchUi.popView(WatchUi.SLIDE_IMMEDIATE);
-
-        if (normalized != null && updated.size() < 5 && !projectArrayContains(updated, normalized)) {
-            updated.add(normalized);
+        if (normalized != null && gOnboardingSelected.size() < 5 && !projectArrayContains(gOnboardingSelected, normalized)) {
+            gOnboardingSelected.add(normalized);
         }
 
-        OnboardingPickerView.show(updated, null);
+        // Defer view switch so TextPicker auto-dismiss animation completes first
+        _refreshTimer = new Timer.Timer();
+        _refreshTimer.start(method(:refreshOnboarding), 300, false);
         return true;
     }
 
     function onCancel() {
-        WatchUi.popView(WatchUi.SLIDE_IMMEDIATE);
-        OnboardingPickerView.show(_selected, null);
+        _refreshTimer = new Timer.Timer();
+        _refreshTimer.start(method(:refreshOnboarding), 300, false);
         return true;
+    }
+
+    function refreshOnboarding() as Void {
+        OnboardingPickerView.show(gOnboardingSelected, null);
     }
 }

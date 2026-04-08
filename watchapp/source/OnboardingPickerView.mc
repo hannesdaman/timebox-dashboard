@@ -5,6 +5,8 @@ class OnboardingPickerView {
 
     static function show(selectedProjects, message) {
         var selected = normalizeProjectList(copyProjects(selectedProjects));
+        gOnboardingSelected = selected;
+
         var title = "Pick projects (" + selected.size() + "/5)";
         if (message != null) {
             title = message;
@@ -24,6 +26,13 @@ class OnboardingPickerView {
             }
 
             menu.addItem(new WatchUi.MenuItem(label, hint, i, null));
+        }
+
+        // Show custom projects (not in presets) so the user can see them
+        for (var i = 0; i < selected.size(); i++) {
+            if (!projectArrayContains(presets, selected[i])) {
+                menu.addItem(new WatchUi.MenuItem("[x] " + selected[i], "Tap to remove", selected[i], null));
+            }
         }
 
         if (selected.size() < 5) {

@@ -1,5 +1,6 @@
 import Toybox.WatchUi;
 import Toybox.Lang;
+import Toybox.Timer;
 
 class NamePickerDelegate extends WatchUi.Menu2InputDelegate {
 
@@ -56,6 +57,7 @@ class ProjectCustomTextDelegate extends WatchUi.TextPickerDelegate {
     private var _currentName;
     private var _durationSeconds;
     private var _label;
+    private var _refreshTimer;
 
     function initialize(mode, index, currentName, durationSeconds, label) {
         TextPickerDelegate.initialize();
@@ -67,17 +69,23 @@ class ProjectCustomTextDelegate extends WatchUi.TextPickerDelegate {
     }
 
     function onTextEntered(text, changed) {
-        WatchUi.popView(WatchUi.SLIDE_IMMEDIATE);
-        WatchUi.popView(WatchUi.SLIDE_IMMEDIATE);
-
         applyProjectNameChange(text, _mode, _index, _currentName);
-        ProjectListView.replace(_durationSeconds, _label);
+
+        // Defer view navigation so TextPicker auto-dismiss animation completes first
+        _refreshTimer = new Timer.Timer();
+        _refreshTimer.start(method(:refreshProjectList), 300, false);
         return true;
     }
 
     function onCancel() {
-        WatchUi.popView(WatchUi.SLIDE_IMMEDIATE);
+        // TextPicker auto-dismisses on real hardware; no action needed
         return true;
+    }
+
+    function refreshProjectList() as Void {
+        // Pop the NamePickerMenu, then replace with refreshed ProjectListView
+        WatchUi.popView(WatchUi.SLIDE_IMMEDIATE);
+        ProjectListView.replace(_durationSeconds, _label);
     }
 }
 
