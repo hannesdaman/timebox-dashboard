@@ -447,9 +447,39 @@ function getWeekStart(d) {
     return formatLocalDate(dt);
 }
 
-function sumByDate(s) { var m = {}; s.forEach(function(x) { m[x.session_date] = (m[x.session_date] || 0) + x.duration; }); return m; }
-function sumByWeek(s) { var m = {}; s.forEach(function(x) { var w = getWeekStart(x.session_date); m[w] = (m[w] || 0) + x.duration; }); return m; }
-function sumByMonth(s) { var m = {}; s.forEach(function(x) { var k = x.session_date.substring(0, 7); m[k] = (m[k] || 0) + x.duration; }); return m; }
+function effectiveSessionDate(row) {
+    if (row.created_at) {
+        return formatLocalDate(new Date(new Date(row.created_at).getTime() - SESSION_DAY_ROLLOVER_MINUTES * 60000));
+    }
+    return row.session_date;
+}
+
+function sumByDate(s) {
+    var m = {};
+    s.forEach(function(x) {
+        var key = effectiveSessionDate(x);
+        m[key] = (m[key] || 0) + x.duration;
+    });
+    return m;
+}
+
+function sumByWeek(s) {
+    var m = {};
+    s.forEach(function(x) {
+        var w = getWeekStart(effectiveSessionDate(x));
+        m[w] = (m[w] || 0) + x.duration;
+    });
+    return m;
+}
+
+function sumByMonth(s) {
+    var m = {};
+    s.forEach(function(x) {
+        var k = effectiveSessionDate(x).substring(0, 7);
+        m[k] = (m[k] || 0) + x.duration;
+    });
+    return m;
+}
 
 function getStreak(s) {
     var bd = sumByDate(s); var d = new Date(getToday() + 'T12:00:00'); var st = 0;
@@ -608,9 +638,13 @@ function buildMonthlyChart(s) {
 }
 
 function buildCumulativeChart(s) {
-    var sorted = s.slice().sort(function(a, b) { return a.session_date.localeCompare(b.session_date); });
+    var sorted = s.slice().sort(function(a, b) {
+        var left = effectiveSessionDate(a) + ' ' + (a.created_at || '');
+        var right = effectiveSessionDate(b) + ' ' + (b.created_at || '');
+        return left.localeCompare(right);
+    });
     if (sorted.length === 0) { if (charts.c) charts.c.destroy(); return; }
-    var cum = 0; var bd = {}; sorted.forEach(function(x) { bd[x.session_date] = (bd[x.session_date] || 0) + x.duration; });
+    var cum = 0; var bd = {}; sorted.forEach(function(x) { var key = effectiveSessionDate(x); bd[key] = (bd[key] || 0) + x.duration; });
     var dates = Object.keys(bd).sort(); var labels = [], data = [];
     dates.forEach(function(d) { cum += bd[d]; labels.push(new Date(d + 'T00:00:00').toLocaleDateString('en', { month: 'short', day: 'numeric' })); data.push(Math.round(cum / 60 * 10) / 10); });
     var c = cc(); if (charts.c) charts.c.destroy();
@@ -625,9 +659,14 @@ function buildFeed(s) {
     var tags = getProjectTags(allSessions);
     var list = document.getElementById('feedList');
     if (s.length === 0) { list.innerHTML = '<div class="feed-empty">No sessions logged yet.</div>'; return; }
+    var ordered = s.slice().sort(function(a, b) {
+        var left = effectiveSessionDate(a) + ' ' + (a.created_at || '');
+        var right = effectiveSessionDate(b) + ' ' + (b.created_at || '');
+        return right.localeCompare(left);
+    });
     var html = '';
-    s.forEach(function(x) {
-        var d = new Date(x.session_date + 'T00:00:00');
+    ordered.forEach(function(x) {
+        var d = new Date(effectiveSessionDate(x) + 'T12:00:00');
         var ds = d.toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' });
         var ts = x.created_at ? ' at ' + new Date(x.created_at).toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
         var col = x.tag ? colorForTag(x.tag, tags) : PROJECT_COLORS[0];

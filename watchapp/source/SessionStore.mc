@@ -642,7 +642,7 @@ class SessionStore {
         if (!(row instanceof Lang.Dictionary)) { return null; }
 
         var remoteId = row["id"];
-        var dayKey = parseDateString(row["session_date"]);
+        var dayKey = effectiveDateKeyForRemoteRow(row);
         var duration = row["duration"];
         var tag = row["tag"];
 
@@ -676,6 +676,68 @@ class SessionStore {
         var month = value.substring(5, 7).toNumber();
         var day = value.substring(8, 10).toNumber();
         return year * 10000 + month * 100 + day;
+    }
+
+    private function effectiveDateKeyForRemoteRow(row) {
+        var createdAt = row["created_at"];
+        var createdAtKey = parseCreatedAtToDateKey(createdAt);
+        if (createdAtKey != 0) {
+            return createdAtKey;
+        }
+        return parseDateString(row["session_date"]);
+    }
+
+    private function parseCreatedAtToDateKey(value) {
+        if (!(value instanceof Lang.String) || value.length() < 19) { return 0; }
+
+        try {
+            var year = value.substring(0, 4).toNumber();
+            var month = value.substring(5, 7).toNumber();
+            var day = value.substring(8, 10).toNumber();
+            var hour = value.substring(11, 13).toNumber();
+            var minute = value.substring(14, 16).toNumber();
+            var second = value.substring(17, 19).toNumber();
+
+            var utcMoment = Gregorian.moment({
+                :year => year,
+                :month => month,
+                :day => day,
+                :hour => hour,
+                :minute => minute,
+                :second => second
+            });
+
+            var markerIndex = findTimeZoneMarker(value);
+            if (markerIndex != -1) {
+                var marker = value.substring(markerIndex, markerIndex + 1);
+                if (!marker.equals("Z") && value.length() >= markerIndex + 6) {
+                    var offsetHours = value.substring(markerIndex + 1, markerIndex + 3).toNumber();
+                    var offsetMinutes = value.substring(markerIndex + 4, markerIndex + 6).toNumber();
+                    var offsetSeconds = offsetHours * 3600 + offsetMinutes * 60;
+                    if (marker.equals("+")) {
+                        utcMoment = new Time.Moment(utcMoment.value() - offsetSeconds);
+                    } else if (marker.equals("-")) {
+                        utcMoment = new Time.Moment(utcMoment.value() + offsetSeconds);
+                    }
+                }
+            }
+
+            var shiftedMoment = new Time.Moment(utcMoment.value() - sessionDayRolloverSeconds());
+            var localInfo = Gregorian.info(shiftedMoment, Time.FORMAT_SHORT);
+            return localInfo.year * 10000 + localInfo.month * 100 + localInfo.day;
+        } catch(e instanceof Lang.Exception) {
+            return 0;
+        }
+    }
+
+    private function findTimeZoneMarker(value as Lang.String) as Lang.Number {
+        for (var i = value.length() - 1; i >= 19; i--) {
+            var ch = value.substring(i, i + 1);
+            if (ch.equals("Z") || ch.equals("+") || ch.equals("-")) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     private function clearUndoState() as Void {

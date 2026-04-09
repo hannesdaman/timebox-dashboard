@@ -140,7 +140,7 @@ class watchappApp extends Application.AppBase {
         _refreshingStats = true;
 
         var cutoff = formatDateKey(store.syncCutoffKey());
-        var url = SUPABASE_URL + "?select=id,session_date,duration,tag&session_date=gte." + cutoff + "&order=session_date.asc,id.asc&limit=5000";
+        var url = SUPABASE_URL + "?select=id,session_date,created_at,duration,tag&session_date=gte." + cutoff + "&order=session_date.asc,id.asc&limit=5000";
         var options = {
             :method => Communications.HTTP_REQUEST_METHOD_GET,
             :headers => {
