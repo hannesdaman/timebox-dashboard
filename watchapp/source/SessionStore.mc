@@ -8,12 +8,12 @@ class SessionStore {
     function initialize() {}
 
     function todayKey() {
-        var info = Gregorian.info(Time.now(), Time.FORMAT_SHORT);
+        var info = Gregorian.info(currentSessionMoment(), Time.FORMAT_SHORT);
         return info.year * 10000 + info.month * 100 + info.day;
     }
 
     function syncCutoffKey() {
-        var cutoff = new Time.Moment(Time.now().value() - 400 * 86400);
+        var cutoff = new Time.Moment(currentSessionMoment().value() - 400 * 86400);
         var info = Gregorian.info(cutoff, Time.FORMAT_SHORT);
         return info.year * 10000 + info.month * 100 + info.day;
     }
@@ -347,7 +347,7 @@ class SessionStore {
         var data = Storage.getValue(storageKey);
         if (data == null) { return 0; }
 
-        var now = Time.now();
+        var now = currentSessionMoment();
         var info = Gregorian.info(now, Time.FORMAT_SHORT);
 
         var total = 0;
@@ -390,7 +390,7 @@ class SessionStore {
     private function pruneOld(data, storageKey) {
         if (data == null) { return; }
 
-        var now = Time.now();
+        var now = currentSessionMoment();
         var cutoff = new Time.Moment(now.value() - 400 * 86400);
         var cutInfo = Gregorian.info(cutoff, Time.FORMAT_SHORT);
         var cutKey = cutInfo.year * 10000 + cutInfo.month * 100 + cutInfo.day;
@@ -684,5 +684,13 @@ class SessionStore {
         Storage.deleteValue("last_tag");
         Storage.deleteValue("last_local_id");
         Storage.deleteValue("last_remote_id");
+    }
+
+    private function currentSessionMoment() as Time.Moment {
+        return new Time.Moment(Time.now().value() - sessionDayRolloverSeconds());
+    }
+
+    private function sessionDayRolloverSeconds() as Lang.Number {
+        return (2 * 3600) + (30 * 60);
     }
 }

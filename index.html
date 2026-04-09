@@ -235,6 +235,7 @@ h1 span { color: var(--text-dim); font-weight: 300; }
 <script>
 var SUPABASE_URL = 'https://gujufwafdradmmehtafx.supabase.co';
 var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd1anVmd2FmZHJhZG1tZWh0YWZ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUxMjE5NDYsImV4cCI6MjA5MDY5Nzk0Nn0.cd9vSriuByxKNaWQhLNWfaiBgEjabrn_9zN6LNlPvrM';
+var SESSION_DAY_ROLLOVER_MINUTES = 150;
 
 // One color per project slot — assigned in alphabetical order of tag name
 var PROJECT_COLORS = ['#6c5ce7', '#00b894', '#e17055', '#fdcb6e', '#74b9ff'];
@@ -422,16 +423,38 @@ function csvValue(value) {
 }
 
 // ---------- HELPERS ----------
-function getToday() { return new Date().toISOString().split('T')[0]; }
-function getWeekStart(d) { var dt = new Date(d + 'T00:00:00'); var day = dt.getDay(); dt.setDate(dt.getDate() - day + (day === 0 ? -6 : 1)); return dt.toISOString().split('T')[0]; }
+function formatLocalDate(date) {
+    var y = date.getFullYear();
+    var m = String(date.getMonth() + 1);
+    if (m.length < 2) m = '0' + m;
+    var d = String(date.getDate());
+    if (d.length < 2) d = '0' + d;
+    return y + '-' + m + '-' + d;
+}
+
+function getSessionNow() {
+    return new Date(Date.now() - SESSION_DAY_ROLLOVER_MINUTES * 60000);
+}
+
+function getToday() {
+    return formatLocalDate(getSessionNow());
+}
+
+function getWeekStart(d) {
+    var dt = new Date(d + 'T12:00:00');
+    var day = dt.getDay();
+    dt.setDate(dt.getDate() - day + (day === 0 ? -6 : 1));
+    return formatLocalDate(dt);
+}
+
 function sumByDate(s) { var m = {}; s.forEach(function(x) { m[x.session_date] = (m[x.session_date] || 0) + x.duration; }); return m; }
 function sumByWeek(s) { var m = {}; s.forEach(function(x) { var w = getWeekStart(x.session_date); m[w] = (m[w] || 0) + x.duration; }); return m; }
 function sumByMonth(s) { var m = {}; s.forEach(function(x) { var k = x.session_date.substring(0, 7); m[k] = (m[k] || 0) + x.duration; }); return m; }
 
 function getStreak(s) {
-    var bd = sumByDate(s); var d = new Date(); var st = 0;
-    if (!bd[d.toISOString().split('T')[0]]) d.setDate(d.getDate() - 1);
-    while (bd[d.toISOString().split('T')[0]]) { st++; d.setDate(d.getDate() - 1); }
+    var bd = sumByDate(s); var d = new Date(getToday() + 'T12:00:00'); var st = 0;
+    if (!bd[formatLocalDate(d)]) d.setDate(d.getDate() - 1);
+    while (bd[formatLocalDate(d)]) { st++; d.setDate(d.getDate() - 1); }
     return st;
 }
 function getBestStreak(s) {
@@ -467,7 +490,7 @@ function updateStats(sessions) {
     var weekStarts = [];
     var ref = new Date(today + 'T12:00:00');
     for (var wi = 0; wi < 4; wi++) {
-        weekStarts.push(getWeekStart(ref.toISOString().split('T')[0]));
+        weekStarts.push(getWeekStart(formatLocalDate(ref)));
         ref.setDate(ref.getDate() - 7);
     }
     var container = document.getElementById('goalWeeks');
@@ -520,7 +543,7 @@ function updateStats(sessions) {
 // ---------- HEATMAP ----------
 function buildHeatmap(sessions) {
     var bd = sumByDate(sessions); var grid = document.getElementById('heatmapGrid'); grid.innerHTML = '';
-    var today = new Date(); var day = today.getDay(); var daysBack = (day === 0 ? 6 : day - 1) + 7 * 15;
+    var today = new Date(getToday() + 'T12:00:00'); var day = today.getDay(); var daysBack = (day === 0 ? 6 : day - 1) + 7 * 15;
     var start = new Date(today); start.setDate(start.getDate() - daysBack);
     var d = new Date(start);
     while (d <= today) {
@@ -528,7 +551,7 @@ function buildHeatmap(sessions) {
         for (var r = 0; r < 7; r++) {
             var cell = document.createElement('div'); cell.className = 'heatmap-cell';
             if (d <= today) {
-                var key = d.toISOString().split('T')[0]; var mins = bd[key] || 0;
+                var key = formatLocalDate(d); var mins = bd[key] || 0;
                 if (mins > 0 && mins < 60) cell.className = 'heatmap-cell l1';
                 else if (mins >= 60 && mins < 180) cell.className = 'heatmap-cell l2';
                 else if (mins >= 180 && mins < 360) cell.className = 'heatmap-cell l3';
@@ -564,10 +587,10 @@ function buildDailyChart(s) {
     var bd = sumByDate(s); var today = getToday(); var ws = getWeekStart(today);
     var labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']; var data = [];
     var d = new Date(ws + 'T00:00:00');
-    for (var i = 0; i < 7; i++) { data.push(bd[d.toISOString().split('T')[0]] || 0); d.setDate(d.getDate() + 1); }
+    for (var i = 0; i < 7; i++) { data.push(bd[formatLocalDate(d)] || 0); d.setDate(d.getDate() + 1); }
     var c = cc(); if (charts.d) charts.d.destroy();
     charts.d = new Chart(document.getElementById('dailyChart'), { type: 'bar', data: { labels: labels, datasets: [{ data: data,
-        backgroundColor: data.map(function(v, i) { var dd = new Date(ws + 'T00:00:00'); dd.setDate(dd.getDate() + i); return dd.toISOString().split('T')[0] === today ? c.green : c.accent; }),
+        backgroundColor: data.map(function(v, i) { var dd = new Date(ws + 'T00:00:00'); dd.setDate(dd.getDate() + i); return formatLocalDate(dd) === today ? c.green : c.accent; }),
         borderRadius: 6, borderSkipped: false, barPercentage: 0.5 }] },
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
             scales: { y: { beginAtZero: true, grid: { color: c.grid }, ticks: { color: c.text, callback: function(v) { return v + 'm'; } } }, x: { grid: { display: false }, ticks: { color: c.text } } } } });

@@ -199,10 +199,14 @@ class watchappApp extends Application.AppBase {
         _refreshingStats = false;
 
         if (responseCode == 200) {
-            var store = new SessionStore();
-            store.reconcileRecentWithRemote(responseRows(data));
-            WatchUi.requestUpdate();
-            System.println("Stats refresh OK");
+            if (canInterpretRows(data)) {
+                var store = new SessionStore();
+                store.reconcileRecentWithRemote(responseRows(data));
+                WatchUi.requestUpdate();
+                System.println("Stats refresh OK");
+            } else {
+                System.println("Stats refresh skipped unsupported payload");
+            }
         } else {
             System.println("Stats refresh FAILED: " + responseCode);
         }
@@ -218,6 +222,13 @@ function responseRows(data) as Lang.Array {
 
     if (data == null) { return rows; }
 
+    if (data instanceof Lang.Array) {
+        for (var i = 0; i < data.size(); i++) {
+            rows.add(data[i]);
+        }
+        return rows;
+    }
+
     if (data has :next) {
         var nextRow = data.next();
         while (nextRow != null) {
@@ -232,6 +243,14 @@ function responseRows(data) as Lang.Array {
     }
 
     return rows;
+}
+
+function canInterpretRows(data) as Lang.Boolean {
+    if (data == null) { return true; }
+    if (data instanceof Lang.Array) { return true; }
+    if (data instanceof Lang.Dictionary) { return true; }
+    if (data has :next) { return true; }
+    return false;
 }
 
 function getGenericProjectOptions() as Lang.Array {
