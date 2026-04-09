@@ -40,11 +40,16 @@ h1 span { color: var(--text-dim); font-weight: 300; }
 .status-dot.online { background: var(--green); }
 .status-dot.offline { background: var(--red); }
 
-/* Tab bar */
-.tab-bar { display: flex; gap: 8px; margin-bottom: 32px; flex-wrap: wrap; }
-.tab { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 8px 20px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s; color: var(--text-dim); font-family: var(--font); }
+/* Filter strip */
+.filter-strip { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
+.tab-shell { display: inline-flex; align-items: center; gap: 8px; padding: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 22px; flex-wrap: wrap; }
+.tab-bar { display: flex; gap: 8px; flex-wrap: wrap; }
+.tab { background: transparent; border: 1px solid transparent; border-radius: 18px; padding: 8px 18px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; color: var(--text-dim); font-family: var(--font); }
 .tab:hover { border-color: var(--accent); color: var(--text); }
 .tab.active { color: white; border-color: transparent; background: var(--accent); box-shadow: 0 2px 12px var(--accent-glow); }
+.filter-note { font-size: 12px; color: var(--text-dim); display: flex; align-items: center; gap: 8px; }
+.filter-note strong { color: var(--text); font-weight: 600; }
+.filter-note-badge { padding: 5px 10px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); font-family: var(--mono); font-size: 11px; color: var(--text); }
 
 /* Stats cards */
 .stats-row { display: flex; gap: 16px; margin-bottom: 32px; flex-wrap: wrap; }
@@ -127,6 +132,8 @@ h1 span { color: var(--text-dim); font-weight: 300; }
 .chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 24px; }
 .chart-card.full-width { grid-column: 1 / -1; }
 .chart-card h3 { font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-dim); margin-bottom: 16px; }
+.chart-note { min-height: 18px; margin-top: -8px; margin-bottom: 12px; font-size: 12px; color: var(--text-dim); }
+.chart-note strong { color: var(--text); font-weight: 600; }
 .chart-container { position: relative; height: 280px; }
 .chart-container.tall { height: 340px; }
 
@@ -144,9 +151,10 @@ h1 span { color: var(--text-dim); font-weight: 300; }
 .feed-meta { display: flex; align-items: center; gap: 8px; margin-top: 3px; flex-wrap: wrap; }
 .feed-time { font-size: 13px; color: var(--text-dim); }
 .feed-tag { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 12px; letter-spacing: 0.3px; }
+.feed-rollover { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 12px; letter-spacing: 0.2px; background: rgba(253, 203, 110, 0.12); color: var(--orange); border: 1px solid rgba(253, 203, 110, 0.18); }
 .feed-empty { text-align: center; padding: 40px; color: var(--text-dim); font-style: italic; }
 
-@media (max-width: 768px) { .charts-grid { grid-template-columns: 1fr; } .stats-row { gap: 10px; } .stat-card { padding: 14px 16px; } .stat-value { font-size: 22px; } .records-row { gap: 10px; } }
+@media (max-width: 768px) { .charts-grid { grid-template-columns: 1fr; } .stats-row { gap: 10px; } .stat-card { padding: 14px 16px; } .stat-value { font-size: 22px; } .records-row { gap: 10px; } .filter-strip { align-items: flex-start; } .filter-note { line-height: 1.45; } }
 </style>
 </head>
 <body>
@@ -165,7 +173,15 @@ h1 span { color: var(--text-dim); font-weight: 300; }
         </div>
     </header>
 
-    <div class="tab-bar" id="tabBar"></div>
+    <div class="filter-strip">
+        <div class="tab-shell">
+            <div class="tab-bar" id="tabBar"></div>
+        </div>
+        <div class="filter-note">
+            <span class="filter-note-badge">Day cutoff 02:30</span>
+            <span>Sessions logged before <strong>02:30</strong> count toward the previous day.</span>
+        </div>
+    </div>
 
     <div class="stats-row">
         <div class="stat-card"><div class="stat-value" id="totalToday">-</div><div class="stat-label">Today</div></div>
@@ -220,10 +236,10 @@ h1 span { color: var(--text-dim); font-weight: 300; }
     </div>
 
     <div class="charts-grid">
-        <div class="chart-card full-width"><h3 id="weeklyTitle">Weekly Time</h3><div class="chart-container tall"><canvas id="weeklyChart"></canvas></div></div>
-        <div class="chart-card"><h3>Daily This Week</h3><div class="chart-container"><canvas id="dailyChart"></canvas></div></div>
-        <div class="chart-card"><h3>Monthly Totals</h3><div class="chart-container"><canvas id="monthlyChart"></canvas></div></div>
-        <div class="chart-card full-width"><h3 id="cumulativeTitle">Cumulative Hours</h3><div class="chart-container tall"><canvas id="cumulativeChart"></canvas></div></div>
+        <div class="chart-card full-width"><h3 id="weeklyTitle">Weekly Time</h3><div class="chart-note" id="weeklyNote"></div><div class="chart-container tall"><canvas id="weeklyChart"></canvas></div></div>
+        <div class="chart-card"><h3>Daily This Week</h3><div class="chart-note" id="dailyNote"></div><div class="chart-container"><canvas id="dailyChart"></canvas></div></div>
+        <div class="chart-card"><h3>Monthly Totals</h3><div class="chart-note" id="monthlyNote"></div><div class="chart-container"><canvas id="monthlyChart"></canvas></div></div>
+        <div class="chart-card full-width"><h3 id="cumulativeTitle">Cumulative Hours</h3><div class="chart-note" id="cumulativeNote"></div><div class="chart-container tall"><canvas id="cumulativeChart"></canvas></div></div>
     </div>
 
     <div class="feed-section">
@@ -332,14 +348,13 @@ function buildTabs(sessions) {
     var tabBar = document.getElementById('tabBar');
     tabBar.innerHTML = '';
 
-    tags.concat(['All']).forEach(function(label) {
+    ['All'].concat(tags).forEach(function(label) {
         var el = document.createElement('button');
         el.className = 'tab' + (label === currentTag ? ' active' : '');
         el.textContent = label;
         if (label === currentTag && label !== 'All') {
             el.style.background = colorForTag(label, tags);
         }
-        if (label === 'All') { el.style.marginLeft = 'auto'; }
         el.onclick = function() {
             currentTag = label;
             loadGoal();
@@ -500,6 +515,13 @@ function filterSessions(sessions) {
     return currentTag === 'All' ? sessions : sessions.filter(function(s) { return s.tag === currentTag; });
 }
 
+function setChartNote(id, text) {
+    var el = document.getElementById(id);
+    if (el) {
+        el.innerHTML = text || '&nbsp;';
+    }
+}
+
 // ---------- STATS ----------
 function updateStats(sessions) {
     var bd = sumByDate(sessions); var today = getToday();
@@ -604,6 +626,13 @@ function buildWeeklyChart(s) {
     if (wks.length > 12) wks = wks.slice(wks.length - 12);
     var labels = wks.map(function(w) { return new Date(w + 'T00:00:00').toLocaleDateString('en', { month: 'short', day: 'numeric' }); });
     var data = wks.map(function(w) { return Math.round(bw[w] / 60 * 10) / 10; });
+    if (wks.length === 0) {
+        setChartNote('weeklyNote', 'No sessions in this view yet.');
+    } else if (wks.length < 3) {
+        setChartNote('weeklyNote', 'Light history so far. <strong>Weekly trend will fill in as you log more.</strong>');
+    } else {
+        setChartNote('weeklyNote', '');
+    }
     var c = cc(); if (charts.w) charts.w.destroy();
     charts.w = new Chart(document.getElementById('weeklyChart'), { type: 'bar', data: { labels: labels, datasets: [
         { data: data, backgroundColor: c.accent, borderRadius: 6, borderSkipped: false, barPercentage: 0.6 },
@@ -618,6 +647,17 @@ function buildDailyChart(s) {
     var labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']; var data = [];
     var d = new Date(ws + 'T00:00:00');
     for (var i = 0; i < 7; i++) { data.push(bd[formatLocalDate(d)] || 0); d.setDate(d.getDate() + 1); }
+    var active = 0;
+    for (var j = 0; j < data.length; j++) {
+        if (data[j] > 0) { active += 1; }
+    }
+    if (active === 0) {
+        setChartNote('dailyNote', 'No active days in this week yet.');
+    } else if (active < 3) {
+        setChartNote('dailyNote', 'Only <strong>' + active + ' active day' + (active === 1 ? '' : 's') + '</strong> in this week so far.');
+    } else {
+        setChartNote('dailyNote', '');
+    }
     var c = cc(); if (charts.d) charts.d.destroy();
     charts.d = new Chart(document.getElementById('dailyChart'), { type: 'bar', data: { labels: labels, datasets: [{ data: data,
         backgroundColor: data.map(function(v, i) { var dd = new Date(ws + 'T00:00:00'); dd.setDate(dd.getDate() + i); return formatLocalDate(dd) === today ? c.green : c.accent; }),
@@ -631,6 +671,13 @@ function buildMonthlyChart(s) {
     if (ms.length > 12) ms = ms.slice(ms.length - 12);
     var labels = ms.map(function(m) { var p = m.split('-'); return new Date(p[0], p[1] - 1).toLocaleDateString('en', { month: 'short', year: '2-digit' }); });
     var data = ms.map(function(m) { return Math.round(bm[m] / 60 * 10) / 10; });
+    if (ms.length === 0) {
+        setChartNote('monthlyNote', 'No monthly data in this view yet.');
+    } else if (ms.length < 3) {
+        setChartNote('monthlyNote', 'Early monthly view. <strong>More logged weeks will make this easier to read.</strong>');
+    } else {
+        setChartNote('monthlyNote', '');
+    }
     var c = cc(); if (charts.m) charts.m.destroy();
     charts.m = new Chart(document.getElementById('monthlyChart'), { type: 'bar', data: { labels: labels, datasets: [{ data: data, backgroundColor: c.accent, borderRadius: 6, borderSkipped: false, barPercentage: 0.5 }] },
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
@@ -643,9 +690,18 @@ function buildCumulativeChart(s) {
         var right = effectiveSessionDate(b) + ' ' + (b.created_at || '');
         return left.localeCompare(right);
     });
-    if (sorted.length === 0) { if (charts.c) charts.c.destroy(); return; }
+    if (sorted.length === 0) {
+        setChartNote('cumulativeNote', 'No cumulative curve yet.');
+        if (charts.c) charts.c.destroy();
+        return;
+    }
     var cum = 0; var bd = {}; sorted.forEach(function(x) { var key = effectiveSessionDate(x); bd[key] = (bd[key] || 0) + x.duration; });
     var dates = Object.keys(bd).sort(); var labels = [], data = [];
+    if (dates.length < 3) {
+        setChartNote('cumulativeNote', 'Early curve. <strong>A few more days will make the trend more meaningful.</strong>');
+    } else {
+        setChartNote('cumulativeNote', '');
+    }
     dates.forEach(function(d) { cum += bd[d]; labels.push(new Date(d + 'T00:00:00').toLocaleDateString('en', { month: 'short', day: 'numeric' })); data.push(Math.round(cum / 60 * 10) / 10); });
     var c = cc(); if (charts.c) charts.c.destroy();
     charts.c = new Chart(document.getElementById('cumulativeChart'), { type: 'line', data: { labels: labels, datasets: [{ data: data, borderColor: c.green, backgroundColor: c.greenLight, borderWidth: 2.5, pointRadius: 3, pointBackgroundColor: c.green, tension: 0.25, fill: true }] },
@@ -671,7 +727,11 @@ function buildFeed(s) {
         var ts = x.created_at ? ' at ' + new Date(x.created_at).toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
         var col = x.tag ? colorForTag(x.tag, tags) : PROJECT_COLORS[0];
         var tagBadge = x.tag ? '<span class="feed-tag" style="background:' + col + '22;color:' + col + '">' + x.tag + '</span>' : '';
-        html += '<div class="feed-item"><div class="feed-item-left"><div class="feed-dot" style="background:' + col + '"></div><div><span class="feed-duration">' + x.duration + ' min</span><div class="feed-meta"><span class="feed-time">' + ds + ts + '</span>' + tagBadge + '</div></div></div><button class="btn btn-danger" onclick="deleteSession(' + x.id + ')">Delete</button></div>';
+        var rolloverBadge = '';
+        if (x.created_at && x.session_date && effectiveSessionDate(x) !== x.session_date) {
+            rolloverBadge = '<span class="feed-rollover">Counted toward ' + ds + '</span>';
+        }
+        html += '<div class="feed-item"><div class="feed-item-left"><div class="feed-dot" style="background:' + col + '"></div><div><span class="feed-duration">' + x.duration + ' min</span><div class="feed-meta"><span class="feed-time">' + ds + ts + '</span>' + rolloverBadge + tagBadge + '</div></div></div><button class="btn btn-danger" onclick="deleteSession(' + x.id + ')">Delete</button></div>';
     });
     list.innerHTML = html;
 }
