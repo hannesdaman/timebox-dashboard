@@ -4,17 +4,22 @@ import Toybox.WatchUi;
 import Toybox.Communications;
 import Toybox.System;
 import Toybox.Application.Storage;
+import Toybox.PersistedContent;
 
 class watchappApp extends Application.AppBase {
 
     var SUPABASE_URL = "https://gujufwafdradmmehtafx.supabase.co/rest/v1/sessions";
     var SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd1anVmd2FmZHJhZG1tZWh0YWZ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUxMjE5NDYsImV4cCI6MjA5MDY5Nzk0Nn0.cd9vSriuByxKNaWQhLNWfaiBgEjabrn_9zN6LNlPvrM";
+    var _syncingLocalId = null;
+    var _refreshingStats = false;
+    var _refreshStatsQueued = false;
 
     function initialize() {
         AppBase.initialize();
     }
 
     function onStart(state as Dictionary?) as Void {
+        syncPendingSessions();
     }
 
     function onStop(state as Dictionary?) as Void {
@@ -55,12 +60,22 @@ class watchappApp extends Application.AppBase {
     }
 
     function syncSession(durationMinutes, dateKey, tag) {
-        var dateStr = formatDateKey(dateKey);
+        syncPendingSessions();
+    }
+
+    function syncPendingSessions() as Void {
+        if (_syncingLocalId != null) { return; }
+
+        var store = new SessionStore();
+        var nextPending = store.peekPendingSession();
+        if (nextPending == null) { return; }
+
+        _syncingLocalId = nextPending["local_id"];
 
         var payload = {
-            "duration" => durationMinutes,
-            "session_date" => dateStr,
-            "tag" => tag
+            "duration" => nextPending["duration"],
+            "session_date" => formatDateKey(nextPending["date_key"]),
+            "tag" => nextPending["tag"]
         };
 
         var options = {
@@ -69,12 +84,12 @@ class watchappApp extends Application.AppBase {
                 "Content-Type" => Communications.REQUEST_CONTENT_TYPE_JSON,
                 "apikey" => SUPABASE_KEY,
                 "Authorization" => "Bearer " + SUPABASE_KEY,
-                "Prefer" => "return=minimal"
+                "Prefer" => "return=representation"
             },
             :responseType => Communications.HTTP_RESPONSE_CONTENT_TYPE_JSON
         };
 
-        Communications.makeWebRequest(SUPABASE_URL, payload, options, method(:onSyncResponse));
+        Communications.makeWebRequest(SUPABASE_URL, payload, options, method(:onPendingSyncResponse));
     }
 
     function deleteSessionsForDate(dateKey) {
@@ -94,9 +109,71 @@ class watchappApp extends Application.AppBase {
         Communications.makeWebRequest(url, null, options, method(:onDeleteResponse));
     }
 
-    function onSyncResponse(responseCode as Lang.Number, data as Lang.Dictionary or Lang.String or Null) as Void {
+    function deleteSessionById(remoteId) as Void {
+        if (!(remoteId instanceof Lang.Number) && !(remoteId instanceof Lang.Long)) { return; }
+
+        var url = SUPABASE_URL + "?id=eq." + remoteId;
+        var options = {
+            :method => Communications.HTTP_REQUEST_METHOD_DELETE,
+            :headers => {
+                "apikey" => SUPABASE_KEY,
+                "Authorization" => "Bearer " + SUPABASE_KEY,
+                "Prefer" => "return=minimal"
+            },
+            :responseType => Communications.HTTP_RESPONSE_CONTENT_TYPE_JSON
+        };
+
+        Communications.makeWebRequest(url, null, options, method(:onDeleteByIdResponse));
+    }
+
+    function refreshStatsFromCloud() as Void {
+        if (_refreshingStats) { return; }
+
+        var store = new SessionStore();
+        if (_syncingLocalId != null || store.peekPendingSession() != null) {
+            _refreshStatsQueued = true;
+            syncPendingSessions();
+            return;
+        }
+
+        _refreshStatsQueued = false;
+        _refreshingStats = true;
+
+        var cutoff = formatDateKey(store.syncCutoffKey());
+        var url = SUPABASE_URL + "?select=id,session_date,duration,tag&session_date=gte." + cutoff + "&order=session_date.asc,id.asc&limit=5000";
+        var options = {
+            :method => Communications.HTTP_REQUEST_METHOD_GET,
+            :headers => {
+                "apikey" => SUPABASE_KEY,
+                "Authorization" => "Bearer " + SUPABASE_KEY
+            },
+            :responseType => Communications.HTTP_RESPONSE_CONTENT_TYPE_JSON
+        };
+
+        Communications.makeWebRequest(url, null, options, method(:onStatsRefreshResponse));
+    }
+
+    function onPendingSyncResponse(responseCode as Lang.Number, data as Lang.Dictionary or Lang.String or PersistedContent.Iterator or Null) as Void {
+        var completedLocalId = _syncingLocalId;
+        _syncingLocalId = null;
+
         if (responseCode == 201 || responseCode == 200) {
+            var store = new SessionStore();
+            var rows = responseRows(data);
+            if (rows.size() > 0) {
+                var firstRow = rows[0];
+                if (firstRow instanceof Lang.Dictionary && firstRow.hasKey("id")) {
+                    store.setLastRemoteIdForLocalId(completedLocalId, firstRow["id"]);
+                }
+            }
+
+            store.removePendingSessionByLocalId(completedLocalId);
             System.println("Sync OK");
+            if (store.peekPendingSession() != null) {
+                syncPendingSessions();
+            } else if (_refreshStatsQueued) {
+                refreshStatsFromCloud();
+            }
         } else {
             System.println("Sync FAILED: " + responseCode);
         }
@@ -109,10 +186,52 @@ class watchappApp extends Application.AppBase {
             System.println("Delete sync FAILED: " + responseCode);
         }
     }
+
+    function onDeleteByIdResponse(responseCode as Lang.Number, data as Lang.Dictionary or Lang.String or Null) as Void {
+        if (responseCode == 204 || responseCode == 200) {
+            System.println("Undo delete sync OK");
+        } else {
+            System.println("Undo delete sync FAILED: " + responseCode);
+        }
+    }
+
+    function onStatsRefreshResponse(responseCode as Lang.Number, data as Lang.Dictionary or Lang.String or PersistedContent.Iterator or Null) as Void {
+        _refreshingStats = false;
+
+        if (responseCode == 200) {
+            var store = new SessionStore();
+            store.reconcileRecentWithRemote(responseRows(data));
+            WatchUi.requestUpdate();
+            System.println("Stats refresh OK");
+        } else {
+            System.println("Stats refresh FAILED: " + responseCode);
+        }
+    }
 }
 
 function getApp() as watchappApp {
     return Application.getApp() as watchappApp;
+}
+
+function responseRows(data) as Lang.Array {
+    var rows = [];
+
+    if (data == null) { return rows; }
+
+    if (data has :next) {
+        var nextRow = data.next();
+        while (nextRow != null) {
+            rows.add(nextRow);
+            nextRow = data.next();
+        }
+        return rows;
+    }
+
+    if (data instanceof Lang.Dictionary) {
+        rows.add(data);
+    }
+
+    return rows;
 }
 
 function getGenericProjectOptions() as Lang.Array {

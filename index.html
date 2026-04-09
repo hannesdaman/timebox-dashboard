@@ -31,6 +31,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--font); min-
 
 header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px; flex-wrap: wrap; gap: 24px; }
 .logo { display: flex; align-items: center; gap: 14px; }
+.header-actions { display: flex; align-items: center; gap: 10px; }
 .logo-icon { width: 44px; height: 44px; background: linear-gradient(135deg, var(--accent), #a29bfe); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 700; color: white; box-shadow: 0 4px 20px var(--accent-glow); }
 h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
 h1 span { color: var(--text-dim); font-weight: 300; }
@@ -158,6 +159,9 @@ h1 span { color: var(--text-dim); font-weight: 300; }
                 <h1>TimeBox <span>Dashboard</span></h1>
                 <div class="status-text" id="statusText"><span class="status-dot"></span>Connecting...</div>
             </div>
+        </div>
+        <div class="header-actions">
+            <button class="quick-btn" onclick="exportCsv()">Export CSV</button>
         </div>
     </header>
 
@@ -381,6 +385,40 @@ function quickAdd(mins) {
 
 async function deleteSession(id) {
     try { await supaFetch('sessions?id=eq.' + id, { method: 'DELETE' }); await refreshAll(); } catch(e) {}
+}
+
+function exportCsv() {
+    var rows = allSessions.slice().sort(function(a, b) {
+        var left = (a.session_date || '') + ' ' + (a.created_at || '');
+        var right = (b.session_date || '') + ' ' + (b.created_at || '');
+        return left.localeCompare(right);
+    });
+
+    var lines = ['id,session_date,created_at,duration,tag'];
+    rows.forEach(function(row) {
+        lines.push([
+            csvValue(row.id),
+            csvValue(row.session_date),
+            csvValue(row.created_at),
+            csvValue(row.duration),
+            csvValue(row.tag || '')
+        ].join(','));
+    });
+
+    var blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'timebox-sessions-' + getToday() + '.csv';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
+
+function csvValue(value) {
+    var text = value == null ? '' : String(value);
+    return '"' + text.replace(/"/g, '""') + '"';
 }
 
 // ---------- HELPERS ----------

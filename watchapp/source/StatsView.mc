@@ -14,6 +14,8 @@ class StatsView extends WatchUi.View {
         View.initialize();
         _store = new SessionStore();
         _messageTimer = new Timer.Timer();
+        getApp().syncPendingSessions();
+        getApp().refreshStatsFromCloud();
         // Build ["All", project1, project2, ...] from on-watch project storage
         _tags = ["All"];
         var projects = getProjects();
@@ -41,12 +43,14 @@ class StatsView extends WatchUi.View {
     }
 
     function undoLast() {
-        var dur = _store.getLastSessionDuration();
-        if (dur == 0) {
+        var info = _store.undoLastRecord();
+        if (info == null) {
             _message = "Nothing to undo";
         } else {
-            _store.undoLast();
-            _message = "-" + dur + " min removed";
+            _message = "-" + info["duration"] + " min removed";
+            if (info["remote_id"] != null) {
+                getApp().deleteSessionById(info["remote_id"]);
+            }
         }
         WatchUi.requestUpdate();
         _messageTimer.start(method(:onMessageTimeout), 2000, false);

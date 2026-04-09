@@ -1,4 +1,5 @@
 import Toybox.Application.Storage;
+import Toybox.Lang;
 import Toybox.Time;
 import Toybox.Time.Gregorian;
 
@@ -11,68 +12,47 @@ class SessionStore {
         return info.year * 10000 + info.month * 100 + info.day;
     }
 
+    function syncCutoffKey() {
+        var cutoff = new Time.Moment(Time.now().value() - 400 * 86400);
+        var info = Gregorian.info(cutoff, Time.FORMAT_SHORT);
+        return info.year * 10000 + info.month * 100 + info.day;
+    }
+
     function logSession(durationMinutes, tag) {
         var key = todayKey();
-
-        var mins = Storage.getValue("mins");
-        if (mins == null) { mins = {}; }
-        var existing = 0;
-        if (mins.hasKey(key)) { existing = mins[key]; }
-        mins.put(key, existing + durationMinutes);
-        Storage.setValue("mins", mins);
-
-        var boxes = Storage.getValue("boxes");
-        if (boxes == null) { boxes = {}; }
-        var existingB = 0;
-        if (boxes.hasKey(key)) { existingB = boxes[key]; }
-        boxes.put(key, existingB + 1);
-        Storage.setValue("boxes", boxes);
-
-        // Per-tag storage
-        var tagMinsKey = "mins_" + tag;
-        var tagMins = Storage.getValue(tagMinsKey);
-        if (tagMins == null) { tagMins = {}; }
-        var existingT = 0;
-        if (tagMins.hasKey(key)) { existingT = tagMins[key]; }
-        tagMins.put(key, existingT + durationMinutes);
-        Storage.setValue(tagMinsKey, tagMins);
-
-        var tagBoxesKey = "boxes_" + tag;
-        var tagBoxes = Storage.getValue(tagBoxesKey);
-        if (tagBoxes == null) { tagBoxes = {}; }
-        var existingTB = 0;
-        if (tagBoxes.hasKey(key)) { existingTB = tagBoxes[key]; }
-        tagBoxes.put(key, existingTB + 1);
-        Storage.setValue(tagBoxesKey, tagBoxes);
-
-        // Track known tags so clearToday can iterate them
-        var knownTags = Storage.getValue("known_tags");
-        if (knownTags == null) { knownTags = []; }
-        var found = false;
-        for (var i = 0; i < knownTags.size(); i++) {
-            if (knownTags[i].equals(tag)) { found = true; break; }
-        }
-        if (!found) {
-            knownTags.add(tag);
-            Storage.setValue("known_tags", knownTags);
-        }
+        var localId = appendSessionToLedger(durationMinutes, key, tag);
+        applySessionToAggregates(key, durationMinutes, tag);
+        queuePendingSession(localId, durationMinutes, key, tag);
 
         // Save last session for undo
         Storage.setValue("last_dur", durationMinutes);
         Storage.setValue("last_day", key);
         Storage.setValue("last_tag", tag);
+        Storage.setValue("last_local_id", localId);
+        Storage.deleteValue("last_remote_id");
 
-        pruneOld(mins, "mins");
-        pruneOld(boxes, "boxes");
-        pruneOld(tagMins, tagMinsKey);
-        pruneOld(tagBoxes, tagBoxesKey);
+        pruneOld(Storage.getValue("mins"), "mins");
+        pruneOld(Storage.getValue("boxes"), "boxes");
+
+        var tagMinsKey = "mins_" + tag;
+        var tagBoxesKey = "boxes_" + tag;
+        pruneOld(Storage.getValue(tagMinsKey), tagMinsKey);
+        pruneOld(Storage.getValue(tagBoxesKey), tagBoxesKey);
     }
 
     function undoLast() {
+        var info = undoLastRecord();
+        if (info == null) { return 0; }
+        return info["duration"];
+    }
+
+    function undoLastRecord() {
         var dur = Storage.getValue("last_dur");
         var dayKey = Storage.getValue("last_day");
         var tag = Storage.getValue("last_tag");
-        if (dur == null || dayKey == null) { return 0; }
+        var localId = Storage.getValue("last_local_id");
+        var remoteId = Storage.getValue("last_remote_id");
+        if (dur == null || dayKey == null) { return null; }
 
         var mins = Storage.getValue("mins");
         if (mins != null && mins.hasKey(dayKey)) {
@@ -107,12 +87,19 @@ class SessionStore {
             }
         }
 
-        // Clear undo so it can't be double-undone
-        var undone = dur;
-        Storage.deleteValue("last_dur");
-        Storage.deleteValue("last_day");
-        Storage.deleteValue("last_tag");
+        if (localId != null) {
+            removePendingSessionByLocalId(localId);
+            removeSessionFromLedgerByLocalId(localId);
+        }
 
+        var undone = {
+            "duration" => dur,
+            "date_key" => dayKey,
+            "tag" => tag,
+            "local_id" => localId,
+            "remote_id" => remoteId
+        };
+        clearUndoState();
         return undone;
     }
 
@@ -124,36 +111,13 @@ class SessionStore {
 
     function clearToday() {
         var key = todayKey();
+        clearDayFromAggregates(key);
+        removePendingSessionsForDay(key);
+        removeSessionsFromLedgerForDay(key);
 
-        var mins = Storage.getValue("mins");
-        if (mins != null && mins.hasKey(key)) {
-            mins.remove(key);
-            Storage.setValue("mins", mins);
-        }
-
-        var boxes = Storage.getValue("boxes");
-        if (boxes != null && boxes.hasKey(key)) {
-            boxes.remove(key);
-            Storage.setValue("boxes", boxes);
-        }
-
-        var knownTags = Storage.getValue("known_tags");
-        if (knownTags == null) { return; }
-
-        for (var i = 0; i < knownTags.size(); i++) {
-            var tagMinsKey = "mins_" + knownTags[i];
-            var tagMins = Storage.getValue(tagMinsKey);
-            if (tagMins != null && tagMins.hasKey(key)) {
-                tagMins.remove(key);
-                Storage.setValue(tagMinsKey, tagMins);
-            }
-
-            var tagBoxesKey = "boxes_" + knownTags[i];
-            var tagBoxes = Storage.getValue(tagBoxesKey);
-            if (tagBoxes != null && tagBoxes.hasKey(key)) {
-                tagBoxes.remove(key);
-                Storage.setValue(tagBoxesKey, tagBoxes);
-            }
+        var lastDay = Storage.getValue("last_day");
+        if (lastDay != null && lastDay == key) {
+            clearUndoState();
         }
     }
 
@@ -231,6 +195,152 @@ class SessionStore {
         if (timerTag != null && timerTag.equals(oldTag)) {
             Storage.setValue("timer_tag", newTag);
         }
+
+        var pending = getPendingSessions();
+        var pendingChanged = false;
+        for (var j = 0; j < pending.size(); j++) {
+            if (pending[j]["tag"] != null && pending[j]["tag"].equals(oldTag)) {
+                pending[j]["tag"] = newTag;
+                pendingChanged = true;
+            }
+        }
+        if (pendingChanged) {
+            Storage.setValue("pending_sessions", pending);
+        }
+
+        var sessions = getSessionLedger();
+        var ledgerChanged = false;
+        for (var k = 0; k < sessions.size(); k++) {
+            if (sessions[k]["tag"] != null && sessions[k]["tag"].equals(oldTag)) {
+                sessions[k]["tag"] = newTag;
+                ledgerChanged = true;
+            }
+        }
+        if (ledgerChanged) {
+            saveSessionLedger(sessions);
+        }
+    }
+
+    function getPendingSessions() as Lang.Array {
+        var pending = Storage.getValue("pending_sessions");
+        if (pending == null || !(pending instanceof Lang.Array)) {
+            return [];
+        }
+        return pending;
+    }
+
+    function peekPendingSession() {
+        var pending = getPendingSessions();
+        if (pending.size() == 0) { return null; }
+        return pending[0];
+    }
+
+    function queuePendingSession(localId, durationMinutes, dayKey, tag) as Void {
+        var pending = getPendingSessions();
+        pending.add({
+            "local_id" => localId,
+            "date_key" => dayKey,
+            "duration" => durationMinutes,
+            "tag" => tag
+        });
+        Storage.setValue("pending_sessions", pending);
+    }
+
+    function removePendingSessionByLocalId(localId) as Void {
+        if (localId == null) { return; }
+
+        var pending = getPendingSessions();
+        if (pending.size() == 0) { return; }
+
+        var updated = [];
+        var changed = false;
+        for (var i = 0; i < pending.size(); i++) {
+            if (pending[i]["local_id"] != null && pending[i]["local_id"].equals(localId)) {
+                changed = true;
+            } else {
+                updated.add(pending[i]);
+            }
+        }
+
+        if (changed) {
+            Storage.setValue("pending_sessions", updated);
+        }
+    }
+
+    function setLastRemoteIdForLocalId(localId, remoteId) as Void {
+        var lastLocalId = Storage.getValue("last_local_id");
+        if (lastLocalId != null && lastLocalId.equals(localId)) {
+            Storage.setValue("last_remote_id", remoteId);
+        }
+
+        var sessions = getSessionLedger();
+        var changed = false;
+        for (var i = 0; i < sessions.size(); i++) {
+            if (sessions[i]["local_id"] != null && sessions[i]["local_id"].equals(localId)) {
+                sessions[i]["remote_id"] = remoteId;
+                changed = true;
+                break;
+            }
+        }
+        if (changed) {
+            saveSessionLedger(sessions);
+        }
+    }
+
+    function reconcileRecentWithRemote(rows) as Void {
+        var cutoffKey = syncCutoffKey();
+        var merged = [];
+
+        if (rows != null && rows instanceof Lang.Array) {
+            for (var i = 0; i < rows.size(); i++) {
+                var session = remoteRowToLedgerSession(rows[i], cutoffKey);
+                if (session != null) {
+                    merged.add(session);
+                }
+            }
+        }
+
+        var pending = getPendingSessions();
+        for (var j = 0; j < pending.size(); j++) {
+            var pendingDay = pending[j]["date_key"];
+            if (pendingDay != null && pendingDay >= cutoffKey) {
+                merged.add({
+                    "local_id" => pending[j]["local_id"],
+                    "remote_id" => null,
+                    "date_key" => pendingDay,
+                    "duration" => pending[j]["duration"],
+                    "tag" => pending[j]["tag"]
+                });
+            }
+        }
+
+        saveSessionLedger(merged);
+        Storage.setValue("ledger_hydrated", true);
+        rebuildAggregatesFromLedger(merged);
+    }
+
+    function getSessionLedger() as Lang.Array {
+        var sessions = Storage.getValue("session_ledger");
+        if (sessions == null || !(sessions instanceof Lang.Array)) {
+            return [];
+        }
+        return sessions;
+    }
+
+    function saveSessionLedger(sessions) as Void {
+        var trimmed = [];
+        var cutoffKey = syncCutoffKey();
+
+        if (sessions instanceof Lang.Array) {
+            for (var i = 0; i < sessions.size(); i++) {
+                var session = normalizeLedgerSession(sessions[i], cutoffKey);
+                if (session != null) {
+                    trimmed.add(session);
+                }
+            }
+        }
+
+        Storage.setValue("session_ledger", trimmed);
     }
 
     private function sumPeriod(storageKey, period) {
@@ -278,6 +388,8 @@ class SessionStore {
     }
 
     private function pruneOld(data, storageKey) {
+        if (data == null) { return; }
+
         var now = Time.now();
         var cutoff = new Time.Moment(now.value() - 400 * 86400);
         var cutInfo = Gregorian.info(cutoff, Time.FORMAT_SHORT);
@@ -320,5 +432,257 @@ class SessionStore {
             if (values[i].equals(target)) { return true; }
         }
         return false;
+    }
+
+    private function applySessionToAggregates(dayKey, durationMinutes, tag) as Void {
+        var mins = Storage.getValue("mins");
+        if (mins == null) { mins = {}; }
+        var existing = 0;
+        if (mins.hasKey(dayKey)) { existing = mins[dayKey]; }
+        mins.put(dayKey, existing + durationMinutes);
+        Storage.setValue("mins", mins);
+
+        var boxes = Storage.getValue("boxes");
+        if (boxes == null) { boxes = {}; }
+        var existingB = 0;
+        if (boxes.hasKey(dayKey)) { existingB = boxes[dayKey]; }
+        boxes.put(dayKey, existingB + 1);
+        Storage.setValue("boxes", boxes);
+
+        var tagMinsKey = "mins_" + tag;
+        var tagMins = Storage.getValue(tagMinsKey);
+        if (tagMins == null) { tagMins = {}; }
+        var existingT = 0;
+        if (tagMins.hasKey(dayKey)) { existingT = tagMins[dayKey]; }
+        tagMins.put(dayKey, existingT + durationMinutes);
+        Storage.setValue(tagMinsKey, tagMins);
+
+        var tagBoxesKey = "boxes_" + tag;
+        var tagBoxes = Storage.getValue(tagBoxesKey);
+        if (tagBoxes == null) { tagBoxes = {}; }
+        var existingTB = 0;
+        if (tagBoxes.hasKey(dayKey)) { existingTB = tagBoxes[dayKey]; }
+        tagBoxes.put(dayKey, existingTB + 1);
+        Storage.setValue(tagBoxesKey, tagBoxes);
+
+        ensureKnownTag(tag);
+    }
+
+    private function clearDayFromAggregates(dayKey) as Void {
+        var mins = Storage.getValue("mins");
+        if (mins != null && mins.hasKey(dayKey)) {
+            mins.remove(dayKey);
+            Storage.setValue("mins", mins);
+        }
+
+        var boxes = Storage.getValue("boxes");
+        if (boxes != null && boxes.hasKey(dayKey)) {
+            boxes.remove(dayKey);
+            Storage.setValue("boxes", boxes);
+        }
+
+        var knownTags = Storage.getValue("known_tags");
+        if (knownTags == null) { return; }
+
+        for (var i = 0; i < knownTags.size(); i++) {
+            var tagMinsKey = "mins_" + knownTags[i];
+            var tagMins = Storage.getValue(tagMinsKey);
+            if (tagMins != null && tagMins.hasKey(dayKey)) {
+                tagMins.remove(dayKey);
+                Storage.setValue(tagMinsKey, tagMins);
+            }
+
+            var tagBoxesKey = "boxes_" + knownTags[i];
+            var tagBoxes = Storage.getValue(tagBoxesKey);
+            if (tagBoxes != null && tagBoxes.hasKey(dayKey)) {
+                tagBoxes.remove(dayKey);
+                Storage.setValue(tagBoxesKey, tagBoxes);
+            }
+        }
+    }
+
+    private function applyPendingSessionsForDay(dayKey) as Void {
+        var pending = getPendingSessions();
+        for (var i = 0; i < pending.size(); i++) {
+            if (pending[i]["date_key"] == dayKey) {
+                applySessionToAggregates(dayKey, pending[i]["duration"], pending[i]["tag"]);
+            }
+        }
+    }
+
+    private function removePendingSessionsForDay(dayKey) as Void {
+        var pending = getPendingSessions();
+        if (pending.size() == 0) { return; }
+
+        var updated = [];
+        var changed = false;
+        for (var i = 0; i < pending.size(); i++) {
+            if (pending[i]["date_key"] == dayKey) {
+                changed = true;
+            } else {
+                updated.add(pending[i]);
+            }
+        }
+
+        if (changed) {
+            Storage.setValue("pending_sessions", updated);
+        }
+    }
+
+    private function ensureKnownTag(tag) as Void {
+        var knownTags = Storage.getValue("known_tags");
+        if (knownTags == null) { knownTags = []; }
+        if (!arrayContains(knownTags, tag)) {
+            knownTags.add(tag);
+            Storage.setValue("known_tags", knownTags);
+        }
+    }
+
+    private function appendSessionToLedger(durationMinutes, dayKey, tag) as Lang.String {
+        var localId = nextLocalSessionId();
+        var sessions = getSessionLedger();
+        sessions.add({
+            "local_id" => localId,
+            "remote_id" => null,
+            "date_key" => dayKey,
+            "duration" => durationMinutes,
+            "tag" => tag
+        });
+        saveSessionLedger(sessions);
+        return localId;
+    }
+
+    private function removeSessionFromLedgerByLocalId(localId) as Void {
+        if (localId == null) { return; }
+
+        var sessions = getSessionLedger();
+        if (sessions.size() == 0) { return; }
+
+        var updated = [];
+        var changed = false;
+        for (var i = 0; i < sessions.size(); i++) {
+            if (sessions[i]["local_id"] != null && sessions[i]["local_id"].equals(localId)) {
+                changed = true;
+            } else {
+                updated.add(sessions[i]);
+            }
+        }
+
+        if (changed) {
+            saveSessionLedger(updated);
+        }
+    }
+
+    private function removeSessionsFromLedgerForDay(dayKey) as Void {
+        var sessions = getSessionLedger();
+        if (sessions.size() == 0) { return; }
+
+        var updated = [];
+        var changed = false;
+        for (var i = 0; i < sessions.size(); i++) {
+            if (sessions[i]["date_key"] == dayKey) {
+                changed = true;
+            } else {
+                updated.add(sessions[i]);
+            }
+        }
+
+        if (changed) {
+            saveSessionLedger(updated);
+        }
+    }
+
+    private function rebuildAggregatesFromLedger(sessions) as Void {
+        clearAllAggregates();
+
+        for (var i = 0; i < sessions.size(); i++) {
+            applySessionToAggregates(sessions[i]["date_key"], sessions[i]["duration"], sessions[i]["tag"]);
+        }
+    }
+
+    private function clearAllAggregates() as Void {
+        Storage.setValue("mins", {});
+        Storage.setValue("boxes", {});
+
+        var knownTags = Storage.getValue("known_tags");
+        if (knownTags == null) { knownTags = []; }
+
+        for (var i = 0; i < knownTags.size(); i++) {
+            Storage.setValue("mins_" + knownTags[i], {});
+            Storage.setValue("boxes_" + knownTags[i], {});
+        }
+
+        Storage.setValue("known_tags", []);
+    }
+
+    private function normalizeLedgerSession(session, cutoffKey) {
+        if (!(session instanceof Lang.Dictionary)) { return null; }
+
+        var dayKey = session["date_key"];
+        var duration = session["duration"];
+        var tag = session["tag"];
+
+        if (!((dayKey instanceof Lang.Number) || (dayKey instanceof Lang.Long))) { return null; }
+        if (!((duration instanceof Lang.Number) || (duration instanceof Lang.Long))) { return null; }
+        if (!(tag instanceof Lang.String)) { return null; }
+
+        var normalizedDay = dayKey.toNumber();
+        if (normalizedDay < cutoffKey) { return null; }
+
+        return {
+            "local_id" => session["local_id"],
+            "remote_id" => session["remote_id"],
+            "date_key" => normalizedDay,
+            "duration" => duration.toNumber(),
+            "tag" => tag
+        };
+    }
+
+    private function remoteRowToLedgerSession(row, cutoffKey) {
+        if (!(row instanceof Lang.Dictionary)) { return null; }
+
+        var remoteId = row["id"];
+        var dayKey = parseDateString(row["session_date"]);
+        var duration = row["duration"];
+        var tag = row["tag"];
+
+        if (dayKey < cutoffKey) { return null; }
+        if (!((remoteId instanceof Lang.Number) || (remoteId instanceof Lang.Long))) { return null; }
+        if (!((duration instanceof Lang.Number) || (duration instanceof Lang.Long))) { return null; }
+        if (!(tag instanceof Lang.String)) { tag = "Studying"; }
+
+        return {
+            "local_id" => null,
+            "remote_id" => remoteId,
+            "date_key" => dayKey,
+            "duration" => duration.toNumber(),
+            "tag" => tag
+        };
+    }
+
+    private function nextLocalSessionId() as Lang.String {
+        var counter = Storage.getValue("session_seq");
+        if (!(counter instanceof Lang.Number) && !(counter instanceof Lang.Long)) {
+            counter = 0;
+        }
+        counter += 1;
+        Storage.setValue("session_seq", counter);
+        return "" + Time.now().value() + "-" + counter;
+    }
+
+    private function parseDateString(value) {
+        if (!(value instanceof Lang.String) || value.length() < 10) { return 0; }
+        var year = value.substring(0, 4).toNumber();
+        var month = value.substring(5, 7).toNumber();
+        var day = value.substring(8, 10).toNumber();
+        return year * 10000 + month * 100 + day;
+    }
+
+    private function clearUndoState() as Void {
+        Storage.deleteValue("last_dur");
+        Storage.deleteValue("last_day");
+        Storage.deleteValue("last_tag");
+        Storage.deleteValue("last_local_id");
+        Storage.deleteValue("last_remote_id");
     }
 }
