@@ -123,8 +123,6 @@ h1 span { color: var(--text-dim); font-weight: 300; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
 .btn-danger { background: transparent; border: 1px solid rgba(225, 112, 85, 0.3); color: var(--red); padding: 6px 14px; font-size: 12px; border-radius: 8px; }
 .btn-danger:hover { background: var(--red); color: white; border-color: var(--red); }
-.btn-refresh { background: transparent; border: 1px solid rgba(108, 92, 231, 0.3); color: #a29bfe; padding: 6px 14px; font-size: 12px; border-radius: 8px; }
-.btn-refresh:hover { background: var(--accent); color: white; border-color: var(--accent); transform: none; box-shadow: none; }
 .quick-add { display: flex; gap: 10px; margin-top: 16px; }
 .quick-btn { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 9px 18px; color: var(--text-dim); font-family: var(--mono); font-size: 13px; cursor: pointer; transition: all 0.2s; }
 .quick-btn:hover { border-color: var(--accent); background: var(--accent-glow); color: var(--text); }
@@ -249,7 +247,6 @@ h1 span { color: var(--text-dim); font-weight: 300; }
     <div class="feed-section">
         <div class="feed-header">
             <h3>Session Feed</h3>
-            <button class="quick-btn" id="repairDaysBtn" onclick="repairSessionDays()">Repair Days</button>
         </div>
         <div class="feed-list" id="feedList"><div class="feed-empty">Loading...</div></div>
     </div>
@@ -412,56 +409,10 @@ async function deleteSession(id) {
     try { await supaFetch('sessions?id=eq.' + id, { method: 'DELETE' }); await refreshAll(); } catch(e) {}
 }
 
-async function refreshSessionDay(id) {
-    var row = findSessionById(id);
-    if (row == null) return;
-    if (!row.created_at) {
-        alert('This session has no timestamp to refresh from.');
-        return;
-    }
-    var nextDate = rolloverSessionDate(row.created_at);
-    if (!nextDate) {
-        alert('Failed to read this session timestamp.');
-        return;
-    }
-    if (nextDate === row.session_date) {
-        alert('This session already matches its current timestamp and cutoff.');
-        return;
-    }
-    try {
-        await supaFetch('sessions?id=eq.' + id, { method: 'PATCH', prefer: 'return=representation', body: { session_date: nextDate } });
-        await refreshAll();
-    } catch(e) { alert('Failed to refresh session day.'); }
-}
-
-async function repairSessionDays() {
-    var btn = document.getElementById('repairDaysBtn');
-    var rows = allSessions.filter(canRefreshSessionDay);
-    if (rows.length === 0) {
-        alert('No session days need repair.');
-        return;
-    }
-    if (btn) btn.disabled = true;
-    try {
-        for (var i = 0; i < rows.length; i++) {
-            await supaFetch('sessions?id=eq.' + rows[i].id, {
-                method: 'PATCH',
-                prefer: 'return=representation',
-                body: { session_date: rolloverSessionDate(rows[i].created_at) }
-            });
-        }
-        await refreshAll();
-        alert('Repaired ' + rows.length + ' session day' + (rows.length === 1 ? '' : 's') + '.');
-    } catch(e) {
-        alert('Failed while repairing session days.');
-    }
-    if (btn) btn.disabled = false;
-}
-
 function exportCsv() {
     var rows = allSessions.slice().sort(function(a, b) {
-        var left = (a.session_date || '') + ' ' + (a.created_at || '');
-        var right = (b.session_date || '') + ' ' + (b.created_at || '');
+        var left = effectiveSessionDate(a) + ' ' + (a.created_at || '');
+        var right = effectiveSessionDate(b) + ' ' + (b.created_at || '');
         return left.localeCompare(right);
     });
 
@@ -469,7 +420,7 @@ function exportCsv() {
     rows.forEach(function(row) {
         lines.push([
             csvValue(row.id),
-            csvValue(row.session_date),
+            csvValue(effectiveSessionDate(row)),
             csvValue(row.created_at),
             csvValue(row.duration),
             csvValue(row.tag || '')
@@ -533,7 +484,24 @@ function rolloverSessionDate(value) {
     return formatLocalDate(new Date(loggedAt.getTime() - SESSION_DAY_ROLLOVER_MINUTES * 60000));
 }
 
+function loggedSessionDate(value) {
+    if (!value) return '';
+    var loggedAt = new Date(value);
+    if (isNaN(loggedAt.getTime())) return '';
+    return formatLocalDate(loggedAt);
+}
+
+function hasStoredCutoffMiss(row) {
+    if (!row || !row.created_at || !row.session_date) return false;
+    var loggedDate = loggedSessionDate(row.created_at);
+    var rolledDate = rolloverSessionDate(row.created_at);
+    return !!loggedDate && !!rolledDate && row.session_date === loggedDate && rolledDate !== loggedDate;
+}
+
 function effectiveSessionDate(row) {
+    if (hasStoredCutoffMiss(row)) {
+        return rolloverSessionDate(row.created_at);
+    }
     if (row.session_date) {
         return row.session_date;
     }
@@ -543,25 +511,11 @@ function effectiveSessionDate(row) {
     return '';
 }
 
-function findSessionById(id) {
-    for (var i = 0; i < allSessions.length; i++) {
-        if (String(allSessions[i].id) === String(id)) return allSessions[i];
-    }
-    return null;
-}
-
-function canRefreshSessionDay(row) {
-    if (!row || row.id == null || !row.created_at || !row.session_date) return false;
-    var rolledDate = rolloverSessionDate(row.created_at);
-    return !!rolledDate && rolledDate !== row.session_date;
-}
-
 function hasRolloverBadge(row, effectiveDate) {
     if (!row.created_at || !effectiveDate) return false;
-    var loggedAt = new Date(row.created_at);
-    var loggedDate = formatLocalDate(loggedAt);
+    var loggedDate = loggedSessionDate(row.created_at);
     var rolledDate = rolloverSessionDate(row.created_at);
-    return loggedDate !== effectiveDate && rolledDate === effectiveDate;
+    return !!loggedDate && loggedDate !== effectiveDate && rolledDate === effectiveDate;
 }
 
 function sumByDate(s) {
@@ -830,8 +784,7 @@ function buildFeed(s) {
         if (hasRolloverBadge(x, effectiveDate)) {
             rolloverBadge = '<span class="feed-rollover">Counted toward ' + effectiveLabel + '</span>';
         }
-        var refreshBtn = (x.id != null && x.created_at) ? '<button class="btn btn-refresh" onclick="refreshSessionDay(' + x.id + ')">Refresh</button>' : '';
-        html += '<div class="feed-item"><div class="feed-item-left"><div class="feed-dot" style="background:' + col + '"></div><div><span class="feed-duration">' + x.duration + ' min</span><div class="feed-meta"><span class="feed-time">' + effectiveLabel + ts + '</span>' + rolloverBadge + tagBadge + '</div></div></div><div class="feed-actions">' + refreshBtn + '<button class="btn btn-danger" onclick="deleteSession(' + x.id + ')">Delete</button></div></div>';
+        html += '<div class="feed-item"><div class="feed-item-left"><div class="feed-dot" style="background:' + col + '"></div><div><span class="feed-duration">' + x.duration + ' min</span><div class="feed-meta"><span class="feed-time">' + effectiveLabel + ts + '</span>' + rolloverBadge + tagBadge + '</div></div></div><div class="feed-actions"><button class="btn btn-danger" onclick="deleteSession(' + x.id + ')">Delete</button></div></div>';
     });
     list.innerHTML = html;
 }
