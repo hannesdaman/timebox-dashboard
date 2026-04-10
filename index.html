@@ -123,6 +123,8 @@ h1 span { color: var(--text-dim); font-weight: 300; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
 .btn-danger { background: transparent; border: 1px solid rgba(225, 112, 85, 0.3); color: var(--red); padding: 6px 14px; font-size: 12px; border-radius: 8px; }
 .btn-danger:hover { background: var(--red); color: white; border-color: var(--red); }
+.btn-refresh { background: transparent; border: 1px solid rgba(108, 92, 231, 0.3); color: #a29bfe; padding: 6px 14px; font-size: 12px; border-radius: 8px; }
+.btn-refresh:hover { background: var(--accent); color: white; border-color: var(--accent); transform: none; box-shadow: none; }
 .quick-add { display: flex; gap: 10px; margin-top: 16px; }
 .quick-btn { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 9px 18px; color: var(--text-dim); font-family: var(--mono); font-size: 13px; cursor: pointer; transition: all 0.2s; }
 .quick-btn:hover { border-color: var(--accent); background: var(--accent-glow); color: var(--text); }
@@ -139,13 +141,15 @@ h1 span { color: var(--text-dim); font-weight: 300; }
 
 /* Feed */
 .feed-section { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 24px; }
-.feed-section h3 { font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-dim); margin-bottom: 16px; }
+.feed-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.feed-section h3 { font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-dim); }
 .feed-list { display: flex; flex-direction: column; gap: 6px; max-height: 400px; overflow-y: auto; }
 .feed-list::-webkit-scrollbar { width: 4px; }
 .feed-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 .feed-item { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; background: var(--surface-2); border: 1px solid transparent; border-radius: 12px; transition: all 0.15s; }
 .feed-item:hover { background: #1e1e2a; border-color: var(--border); }
 .feed-item-left { display: flex; align-items: center; gap: 14px; }
+.feed-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 .feed-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--accent); }
 .feed-duration { font-family: var(--mono); font-size: 16px; font-weight: 600; }
 .feed-meta { display: flex; align-items: center; gap: 8px; margin-top: 3px; flex-wrap: wrap; }
@@ -243,7 +247,10 @@ h1 span { color: var(--text-dim); font-weight: 300; }
     </div>
 
     <div class="feed-section">
-        <h3>Session Feed</h3>
+        <div class="feed-header">
+            <h3>Session Feed</h3>
+            <button class="quick-btn" id="repairDaysBtn" onclick="repairSessionDays()">Repair Days</button>
+        </div>
         <div class="feed-list" id="feedList"><div class="feed-empty">Loading...</div></div>
     </div>
 </div>
@@ -381,10 +388,12 @@ function syncTagDropdown(tags) {
 
 // ---------- ADD / DELETE ----------
 async function addSession() {
-    var d = document.getElementById('sessionDate').value;
+    var rawDate = document.getElementById('sessionDate').value;
+    var d = resolveManualSessionDate(rawDate);
     var m = parseInt(document.getElementById('sessionMinutes').value);
     var tag = document.getElementById('sessionTag').value || 'Studying';
     if (!d || !m || m < 1) return;
+    if (d !== rawDate) document.getElementById('sessionDate').value = d;
     document.getElementById('addBtn').disabled = true;
     try {
         await supaFetch('sessions', { method: 'POST', prefer: 'return=representation', body: { session_date: d, duration: m, tag: tag } });
@@ -401,6 +410,52 @@ function quickAdd(mins) {
 
 async function deleteSession(id) {
     try { await supaFetch('sessions?id=eq.' + id, { method: 'DELETE' }); await refreshAll(); } catch(e) {}
+}
+
+async function refreshSessionDay(id) {
+    var row = findSessionById(id);
+    if (row == null) return;
+    if (!row.created_at) {
+        alert('This session has no timestamp to refresh from.');
+        return;
+    }
+    var nextDate = rolloverSessionDate(row.created_at);
+    if (!nextDate) {
+        alert('Failed to read this session timestamp.');
+        return;
+    }
+    if (nextDate === row.session_date) {
+        alert('This session already matches its current timestamp and cutoff.');
+        return;
+    }
+    try {
+        await supaFetch('sessions?id=eq.' + id, { method: 'PATCH', prefer: 'return=representation', body: { session_date: nextDate } });
+        await refreshAll();
+    } catch(e) { alert('Failed to refresh session day.'); }
+}
+
+async function repairSessionDays() {
+    var btn = document.getElementById('repairDaysBtn');
+    var rows = allSessions.filter(canRefreshSessionDay);
+    if (rows.length === 0) {
+        alert('No session days need repair.');
+        return;
+    }
+    if (btn) btn.disabled = true;
+    try {
+        for (var i = 0; i < rows.length; i++) {
+            await supaFetch('sessions?id=eq.' + rows[i].id, {
+                method: 'PATCH',
+                prefer: 'return=representation',
+                body: { session_date: rolloverSessionDate(rows[i].created_at) }
+            });
+        }
+        await refreshAll();
+        alert('Repaired ' + rows.length + ' session day' + (rows.length === 1 ? '' : 's') + '.');
+    } catch(e) {
+        alert('Failed while repairing session days.');
+    }
+    if (btn) btn.disabled = false;
 }
 
 function exportCsv() {
@@ -451,8 +506,17 @@ function getSessionNow() {
     return new Date(Date.now() - SESSION_DAY_ROLLOVER_MINUTES * 60000);
 }
 
+function getCalendarToday() {
+    return formatLocalDate(new Date());
+}
+
 function getToday() {
     return formatLocalDate(getSessionNow());
+}
+
+function resolveManualSessionDate(dateValue) {
+    if (!dateValue) return '';
+    return dateValue === getCalendarToday() ? getToday() : dateValue;
 }
 
 function getWeekStart(d) {
@@ -462,11 +526,42 @@ function getWeekStart(d) {
     return formatLocalDate(dt);
 }
 
+function rolloverSessionDate(value) {
+    if (!value) return '';
+    var loggedAt = new Date(value);
+    if (isNaN(loggedAt.getTime())) return '';
+    return formatLocalDate(new Date(loggedAt.getTime() - SESSION_DAY_ROLLOVER_MINUTES * 60000));
+}
+
 function effectiveSessionDate(row) {
-    if (row.created_at) {
-        return formatLocalDate(new Date(new Date(row.created_at).getTime() - SESSION_DAY_ROLLOVER_MINUTES * 60000));
+    if (row.session_date) {
+        return row.session_date;
     }
-    return row.session_date;
+    if (row.created_at) {
+        return rolloverSessionDate(row.created_at);
+    }
+    return '';
+}
+
+function findSessionById(id) {
+    for (var i = 0; i < allSessions.length; i++) {
+        if (String(allSessions[i].id) === String(id)) return allSessions[i];
+    }
+    return null;
+}
+
+function canRefreshSessionDay(row) {
+    if (!row || row.id == null || !row.created_at || !row.session_date) return false;
+    var rolledDate = rolloverSessionDate(row.created_at);
+    return !!rolledDate && rolledDate !== row.session_date;
+}
+
+function hasRolloverBadge(row, effectiveDate) {
+    if (!row.created_at || !effectiveDate) return false;
+    var loggedAt = new Date(row.created_at);
+    var loggedDate = formatLocalDate(loggedAt);
+    var rolledDate = rolloverSessionDate(row.created_at);
+    return loggedDate !== effectiveDate && rolledDate === effectiveDate;
 }
 
 function sumByDate(s) {
@@ -722,16 +817,21 @@ function buildFeed(s) {
     });
     var html = '';
     ordered.forEach(function(x) {
-        var d = new Date(effectiveSessionDate(x) + 'T12:00:00');
-        var ds = d.toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' });
-        var ts = x.created_at ? ' at ' + new Date(x.created_at).toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+        var effectiveDate = effectiveSessionDate(x);
+        var effectiveLabel = new Date(effectiveDate + 'T12:00:00').toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' });
+        var ts = '';
+        if (x.created_at) {
+            var loggedAt = new Date(x.created_at);
+            ts = ' at ' + loggedAt.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit', hour12: false });
+        }
         var col = x.tag ? colorForTag(x.tag, tags) : PROJECT_COLORS[0];
         var tagBadge = x.tag ? '<span class="feed-tag" style="background:' + col + '22;color:' + col + '">' + x.tag + '</span>' : '';
         var rolloverBadge = '';
-        if (x.created_at && x.session_date && effectiveSessionDate(x) !== x.session_date) {
-            rolloverBadge = '<span class="feed-rollover">Counted toward ' + ds + '</span>';
+        if (hasRolloverBadge(x, effectiveDate)) {
+            rolloverBadge = '<span class="feed-rollover">Counted toward ' + effectiveLabel + '</span>';
         }
-        html += '<div class="feed-item"><div class="feed-item-left"><div class="feed-dot" style="background:' + col + '"></div><div><span class="feed-duration">' + x.duration + ' min</span><div class="feed-meta"><span class="feed-time">' + ds + ts + '</span>' + rolloverBadge + tagBadge + '</div></div></div><button class="btn btn-danger" onclick="deleteSession(' + x.id + ')">Delete</button></div>';
+        var refreshBtn = (x.id != null && x.created_at) ? '<button class="btn btn-refresh" onclick="refreshSessionDay(' + x.id + ')">Refresh</button>' : '';
+        html += '<div class="feed-item"><div class="feed-item-left"><div class="feed-dot" style="background:' + col + '"></div><div><span class="feed-duration">' + x.duration + ' min</span><div class="feed-meta"><span class="feed-time">' + effectiveLabel + ts + '</span>' + rolloverBadge + tagBadge + '</div></div></div><div class="feed-actions">' + refreshBtn + '<button class="btn btn-danger" onclick="deleteSession(' + x.id + ')">Delete</button></div></div>';
     });
     list.innerHTML = html;
 }
