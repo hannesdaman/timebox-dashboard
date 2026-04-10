@@ -773,10 +773,14 @@ function buildFeed(s) {
     ordered.forEach(function(x) {
         var effectiveDate = effectiveSessionDate(x);
         var effectiveLabel = new Date(effectiveDate + 'T12:00:00').toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' });
+        var loggedLabel = effectiveLabel;
         var ts = '';
         if (x.created_at) {
             var loggedAt = new Date(x.created_at);
+            loggedLabel = loggedAt.toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' });
             ts = ' at ' + loggedAt.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit', hour12: false });
+        } else if (x.session_date) {
+            loggedLabel = new Date(x.session_date + 'T12:00:00').toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' });
         }
         var col = x.tag ? colorForTag(x.tag, tags) : PROJECT_COLORS[0];
         var tagBadge = x.tag ? '<span class="feed-tag" style="background:' + col + '22;color:' + col + '">' + x.tag + '</span>' : '';
@@ -784,7 +788,7 @@ function buildFeed(s) {
         if (hasRolloverBadge(x, effectiveDate)) {
             rolloverBadge = '<span class="feed-rollover">Counted toward ' + effectiveLabel + '</span>';
         }
-        html += '<div class="feed-item"><div class="feed-item-left"><div class="feed-dot" style="background:' + col + '"></div><div><span class="feed-duration">' + x.duration + ' min</span><div class="feed-meta"><span class="feed-time">' + effectiveLabel + ts + '</span>' + rolloverBadge + tagBadge + '</div></div></div><div class="feed-actions"><button class="btn btn-danger" onclick="deleteSession(' + x.id + ')">Delete</button></div></div>';
+        html += '<div class="feed-item"><div class="feed-item-left"><div class="feed-dot" style="background:' + col + '"></div><div><span class="feed-duration">' + x.duration + ' min</span><div class="feed-meta"><span class="feed-time">' + loggedLabel + ts + '</span>' + rolloverBadge + tagBadge + '</div></div></div><div class="feed-actions"><button class="btn btn-danger" onclick="deleteSession(' + x.id + ')">Delete</button></div></div>';
     });
     list.innerHTML = html;
 }
