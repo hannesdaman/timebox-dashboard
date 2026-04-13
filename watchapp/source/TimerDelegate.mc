@@ -26,7 +26,12 @@ class TimerDelegate extends WatchUi.BehaviorDelegate {
     // BACK = exit app (session is auto-saved in onHide)
     // On WELL DONE screen, state is already cleared
     function onBack() {
-        WatchUi.popView(WatchUi.SLIDE_DOWN);
+        if (_view.shouldBackToMenu()) {
+            _view.discardSavedTimer();
+            WatchUi.switchToView(new Rez.Menus.MainMenu(), new watchappMenuDelegate(), WatchUi.SLIDE_DOWN);
+        } else {
+            WatchUi.popView(WatchUi.SLIDE_DOWN);
+        }
         return true;
     }
 }

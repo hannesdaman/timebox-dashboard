@@ -46,6 +46,7 @@ class watchappApp extends Application.AppBase {
 
                 try {
                     var timerView = new TimerView(total, label, tag);
+                    timerView.markRootRestoredLaunch();
                     timerView.restoreState(remaining, total, label, wasRunning);
                     return [ timerView, new TimerDelegate(timerView) ];
                 } catch(e instanceof Lang.Exception) {

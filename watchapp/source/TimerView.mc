@@ -15,6 +15,9 @@ class TimerView extends WatchUi.View {
     private var _tickTimer;
     private var _running = false;
     private var _logged = false;
+    private var _resumeOnShow = true;
+    private var _rootRestoredLaunch = false;
+    private var _discardOnHide = false;
 
     function initialize(totalSeconds, label, tag) {
         WatchUi.View.initialize();
@@ -28,25 +31,23 @@ class TimerView extends WatchUi.View {
     function restoreState(remaining, total, label, wasRunning) {
         _totalSeconds = total;
         _label = label;
+        _remainingSeconds = remaining;
+        _resumeOnShow = (wasRunning == true);
+        _running = false;
+    }
 
-        if (wasRunning) {
-            // Timer was running when we left — calculate elapsed time
-            var savedAt = Storage.getValue("timer_saved_at");
-            if (savedAt != null) {
-                var elapsed = Time.now().value() - savedAt;
-                _remainingSeconds = remaining - elapsed;
-                if (_remainingSeconds < 0) {
-                    _remainingSeconds = 0;
-                }
-            } else {
-                _remainingSeconds = remaining;
-            }
-            // Auto-start since it was running before
-            _running = false; // startTimer will set this
-        } else {
-            // Timer was paused when we left — restore exactly
-            _remainingSeconds = remaining;
-        }
+    function markRootRestoredLaunch() {
+        _rootRestoredLaunch = true;
+    }
+
+    function shouldBackToMenu() as Lang.Boolean {
+        return _rootRestoredLaunch;
+    }
+
+    function discardSavedTimer() as Void {
+        _discardOnHide = true;
+        _rootRestoredLaunch = false;
+        clearSavedState();
     }
 
     function wasRestoredRunning() {
@@ -80,15 +81,34 @@ class TimerView extends WatchUi.View {
     }
 
     function onShow() {
-        if (_remainingSeconds > 0 && !_running) {
+        if (_remainingSeconds > 0 && !_running && _resumeOnShow) {
+            var savedAt = Storage.getValue("timer_saved_at");
+            if ((savedAt instanceof Lang.Number) || (savedAt instanceof Lang.Long)) {
+                var elapsed = Time.now().value() - savedAt.toNumber();
+                if (elapsed > 0) {
+                    _remainingSeconds -= elapsed;
+                    if (_remainingSeconds < 0) {
+                        _remainingSeconds = 0;
+                    }
+                }
+            }
             startTimer();
         }
+        _resumeOnShow = false;
         WatchUi.requestUpdate();
     }
 
     function onHide() {
+        if (_discardOnHide) {
+            _discardOnHide = false;
+            clearSavedState();
+            stopTimer();
+            return;
+        }
+
         // Save state so we can resume later
         if (_remainingSeconds > 0) {
+            _resumeOnShow = _running;
             Storage.setValue("timer_remaining", _remainingSeconds);
             Storage.setValue("timer_total", _totalSeconds);
             Storage.setValue("timer_label", _label);
