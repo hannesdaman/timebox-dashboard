@@ -93,6 +93,8 @@ h1 span { color: var(--text-dim); font-weight: 300; }
 .heatmap-section { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 24px; margin-bottom: 32px; }
 .heatmap-section h3 { font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-dim); margin-bottom: 16px; }
 .heatmap-body { display: flex; align-items: flex-start; gap: 8px; }
+.heatmap-axis { display: flex; flex-direction: column; gap: 10px; flex-shrink: 0; }
+.heatmap-week-axis-label { font-size: 10px; line-height: 12px; color: var(--text-dim); font-family: var(--mono); height: 12px; padding-right: 6px; }
 .heatmap-scroll { flex: 1; min-width: 0; overflow-x: auto; padding-bottom: 8px; }
 .heatmap-scroll-inner { min-width: max-content; display: flex; flex-direction: column; gap: 10px; }
 .heatmap-week-labels { display: flex; gap: 3px; }
@@ -221,7 +223,10 @@ h1 span { color: var(--text-dim); font-weight: 300; }
     <div class="heatmap-section">
         <h3 id="heatmapTitle">Activity — Last 16 Weeks</h3>
         <div class="heatmap-body">
-            <div class="heatmap-day-labels"><span>Mon</span><span></span><span>Wed</span><span></span><span>Fri</span><span></span><span>Sun</span></div>
+            <div class="heatmap-axis">
+                <div class="heatmap-week-axis-label">Week</div>
+                <div class="heatmap-day-labels"><span>Mon</span><span></span><span>Wed</span><span></span><span>Fri</span><span></span><span>Sun</span></div>
+            </div>
             <div class="heatmap-scroll">
                 <div class="heatmap-scroll-inner">
                     <div class="heatmap-week-labels" id="heatmapWeekLabels"></div>
