@@ -92,14 +92,19 @@ h1 span { color: var(--text-dim); font-weight: 300; }
 /* Heatmap */
 .heatmap-section { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 24px; margin-bottom: 32px; }
 .heatmap-section h3 { font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-dim); margin-bottom: 16px; }
-.heatmap-grid { display: flex; gap: 3px; overflow-x: auto; padding-bottom: 8px; }
+.heatmap-body { display: flex; align-items: flex-start; gap: 8px; }
+.heatmap-scroll { flex: 1; min-width: 0; overflow-x: auto; padding-bottom: 8px; }
+.heatmap-scroll-inner { min-width: max-content; display: flex; flex-direction: column; gap: 10px; }
+.heatmap-week-labels { display: flex; gap: 3px; }
+.heatmap-week-label { width: 14px; text-align: center; font-size: 9px; line-height: 12px; color: var(--text-dim); font-family: var(--mono); }
+.heatmap-grid { display: flex; gap: 3px; }
 .heatmap-col { display: flex; flex-direction: column; gap: 3px; }
 .heatmap-cell { width: 14px; height: 14px; border-radius: 3px; background: var(--surface-2); }
 .heatmap-cell.l1 { background: rgba(108, 92, 231, 0.25); }
 .heatmap-cell.l2 { background: rgba(108, 92, 231, 0.45); }
 .heatmap-cell.l3 { background: rgba(108, 92, 231, 0.7); }
 .heatmap-cell.l4 { background: rgba(108, 92, 231, 1); }
-.heatmap-legend { display: flex; align-items: center; gap: 6px; margin-top: 12px; justify-content: flex-end; }
+.heatmap-legend { display: flex; align-items: center; gap: 6px; justify-content: flex-start; }
 .heatmap-legend span { font-size: 11px; color: var(--text-dim); }
 .heatmap-day-labels { display: flex; flex-direction: column; gap: 3px; margin-right: 6px; }
 .heatmap-day-labels span { font-size: 10px; color: var(--text-dim); height: 14px; line-height: 14px; }
@@ -215,11 +220,16 @@ h1 span { color: var(--text-dim); font-weight: 300; }
 
     <div class="heatmap-section">
         <h3 id="heatmapTitle">Activity — Last 16 Weeks</h3>
-        <div style="display:flex;">
+        <div class="heatmap-body">
             <div class="heatmap-day-labels"><span>Mon</span><span></span><span>Wed</span><span></span><span>Fri</span><span></span><span>Sun</span></div>
-            <div class="heatmap-grid" id="heatmapGrid"></div>
+            <div class="heatmap-scroll">
+                <div class="heatmap-scroll-inner">
+                    <div class="heatmap-week-labels" id="heatmapWeekLabels"></div>
+                    <div class="heatmap-grid" id="heatmapGrid"></div>
+                    <div class="heatmap-legend"><span>Less</span><div class="heatmap-cell"></div><div class="heatmap-cell l1"></div><div class="heatmap-cell l2"></div><div class="heatmap-cell l3"></div><div class="heatmap-cell l4"></div><span>More</span></div>
+                </div>
+            </div>
         </div>
-        <div class="heatmap-legend"><span>Less</span><div class="heatmap-cell"></div><div class="heatmap-cell l1"></div><div class="heatmap-cell l2"></div><div class="heatmap-cell l3"></div><div class="heatmap-cell l4"></div><span>More</span></div>
     </div>
 
     <div class="input-section">
@@ -477,6 +487,16 @@ function getWeekStart(d) {
     return formatLocalDate(dt);
 }
 
+function getIsoWeekNumber(date) {
+    var dt = new Date(date.getTime());
+    dt.setHours(12, 0, 0, 0);
+    var day = dt.getDay();
+    if (day === 0) day = 7;
+    dt.setDate(dt.getDate() + 4 - day);
+    var yearStart = new Date(dt.getFullYear(), 0, 1);
+    return Math.ceil((((dt - yearStart) / 86400000) + 1) / 7);
+}
+
 function rolloverSessionDate(value) {
     if (!value) return '';
     var loggedAt = new Date(value);
@@ -643,11 +663,25 @@ function updateStats(sessions) {
 
 // ---------- HEATMAP ----------
 function buildHeatmap(sessions) {
-    var bd = sumByDate(sessions); var grid = document.getElementById('heatmapGrid'); grid.innerHTML = '';
+    var bd = sumByDate(sessions);
+    var grid = document.getElementById('heatmapGrid');
+    var weekLabels = document.getElementById('heatmapWeekLabels');
+    grid.innerHTML = '';
+    weekLabels.innerHTML = '';
     var today = new Date(getToday() + 'T12:00:00'); var day = today.getDay(); var daysBack = (day === 0 ? 6 : day - 1) + 7 * 15;
     var start = new Date(today); start.setDate(start.getDate() - daysBack);
     var d = new Date(start);
+    var weekIndex = 0;
     while (d <= today) {
+        var weekStart = new Date(d);
+        var label = document.createElement('div');
+        label.className = 'heatmap-week-label';
+        if (weekIndex % 2 === 0 || d.getTime() == start.getTime()) {
+            label.textContent = getIsoWeekNumber(weekStart);
+        }
+        label.title = 'Week ' + getIsoWeekNumber(weekStart);
+        weekLabels.appendChild(label);
+
         var col = document.createElement('div'); col.className = 'heatmap-col';
         for (var r = 0; r < 7; r++) {
             var cell = document.createElement('div'); cell.className = 'heatmap-cell';
@@ -662,6 +696,7 @@ function buildHeatmap(sessions) {
             col.appendChild(cell); d.setDate(d.getDate() + 1);
         }
         grid.appendChild(col);
+        weekIndex += 1;
     }
     document.getElementById('heatmapTitle').textContent = (currentTag === 'All' ? 'Activity' : currentTag) + ' — Last 16 Weeks';
 }
