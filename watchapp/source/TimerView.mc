@@ -23,7 +23,6 @@ class TimerView extends WatchUi.View {
     private var _statusStr = "Paused";
     private var _doneDurationStr = "";
     private var _todayTotal = 0;
-    private var _todayTotalCached = false;
     private var _layoutWidth = null;
     private var _layoutHeight = null;
     private var _centerX = 0;
@@ -63,6 +62,10 @@ class TimerView extends WatchUi.View {
         _statusStr = "Paused";
         updateCachedTimeText();
         updateCachedDurationText();
+
+        if (_resumeOnShow) {
+            applyRestoredRunningState();
+        }
     }
 
     function markRootRestoredLaunch() {
@@ -90,7 +93,12 @@ class TimerView extends WatchUi.View {
 
     function toggle() {
         if (_remainingSeconds <= 0 && !_running) { return; }
-        if (_running) { stopTimer(); } else { startTimer(); }
+        if (_running) {
+            stopTimer();
+            persistTimerState();
+        } else {
+            startTimer();
+        }
         WatchUi.requestUpdate();
     }
 
@@ -99,11 +107,12 @@ class TimerView extends WatchUi.View {
         stopTimer();
         _logged = false;
         _todayTotal = 0;
-        _todayTotalCached = false;
         _remainingSeconds = _totalSeconds;
         updateCachedTimeText();
         if (wasRunning) {
             startTimer();
+        } else {
+            persistTimerState();
         }
         WatchUi.requestUpdate();
     }
@@ -114,17 +123,7 @@ class TimerView extends WatchUi.View {
 
     function onShow() {
         if (_remainingSeconds > 0 && !_running && _resumeOnShow) {
-            var savedAt = Storage.getValue("timer_saved_at");
-            if ((savedAt instanceof Lang.Number) || (savedAt instanceof Lang.Long)) {
-                var elapsed = Time.now().value() - savedAt.toNumber();
-                if (elapsed > 0) {
-                    _remainingSeconds -= elapsed;
-                    if (_remainingSeconds <= 0) {
-                        _remainingSeconds = 0;
-                    }
-                    updateCachedTimeText();
-                }
-            }
+            applyRestoredRunningState();
             if (_remainingSeconds > 0) {
                 startTimer();
             }
@@ -143,15 +142,15 @@ class TimerView extends WatchUi.View {
 
         updateRemainingFromClock();
 
+        if (_remainingSeconds <= 0) {
+            completeTimer();
+            return;
+        }
+
         // Save state so we can resume later
         if (_remainingSeconds > 0) {
             _resumeOnShow = _running;
-            Storage.setValue("timer_remaining", _remainingSeconds);
-            Storage.setValue("timer_total", _totalSeconds);
-            Storage.setValue("timer_label", _label);
-            Storage.setValue("timer_tag", _tag);
-            Storage.setValue("timer_saved_at", Time.now().value());
-            Storage.setValue("timer_was_running", _running);
+            persistTimerState();
         } else {
             clearSavedState();
         }
@@ -165,6 +164,7 @@ class TimerView extends WatchUi.View {
         Storage.deleteValue("timer_tag");
         Storage.deleteValue("timer_saved_at");
         Storage.deleteValue("timer_was_running");
+        Storage.deleteValue("timer_deadline");
     }
 
     static function hasSavedState() {
@@ -194,6 +194,11 @@ class TimerView extends WatchUi.View {
             if (savedAt != null && !(savedAt instanceof Lang.Number) && !(savedAt instanceof Lang.Long)) {
                 return false;
             }
+
+            var deadline = Storage.getValue("timer_deadline");
+            if (deadline != null && !(deadline instanceof Lang.Number) && !(deadline instanceof Lang.Long)) {
+                return false;
+            }
         }
 
         return true;
@@ -201,9 +206,22 @@ class TimerView extends WatchUi.View {
 
     private function startTimer() {
         if (_running) { return; }
+        if (_remainingSeconds <= 0) {
+            completeTimer();
+            return;
+        }
+
+        var now = Time.now().value();
+        if ((_deadlineSeconds == null) || (_deadlineSeconds <= now)) {
+            _deadlineSeconds = now + _remainingSeconds;
+        } else {
+            _remainingSeconds = _deadlineSeconds - now;
+            updateCachedTimeText();
+        }
+
         _running = true;
-        _deadlineSeconds = Time.now().value() + _remainingSeconds;
         _statusStr = "Running";
+        persistTimerState();
         _tickTimer.start(method(:onTick), 1000, true);
     }
 
@@ -227,6 +245,77 @@ class TimerView extends WatchUi.View {
             _remainingSeconds = remaining;
             updateCachedTimeText();
         }
+    }
+
+    private function applyRestoredRunningState() as Void {
+        var now = Time.now().value();
+        var deadline = Storage.getValue("timer_deadline");
+
+        if ((deadline instanceof Lang.Number) || (deadline instanceof Lang.Long)) {
+            _deadlineSeconds = deadline.toNumber();
+            _remainingSeconds = _deadlineSeconds - now;
+        } else {
+            var savedAt = Storage.getValue("timer_saved_at");
+            if ((savedAt instanceof Lang.Number) || (savedAt instanceof Lang.Long)) {
+                var elapsed = now - savedAt.toNumber();
+                if (elapsed > 0) {
+                    _remainingSeconds -= elapsed;
+                }
+            }
+        }
+
+        if (_remainingSeconds <= 0) {
+            _remainingSeconds = 0;
+            updateCachedTimeText();
+            _resumeOnShow = false;
+            completeTimer();
+            return;
+        }
+
+        updateCachedTimeText();
+    }
+
+    private function persistTimerState() as Void {
+        if (_remainingSeconds <= 0) {
+            clearSavedState();
+            return;
+        }
+
+        Storage.setValue("timer_remaining", _remainingSeconds);
+        Storage.setValue("timer_total", _totalSeconds);
+        Storage.setValue("timer_label", _label);
+        Storage.setValue("timer_tag", _tag);
+        Storage.setValue("timer_saved_at", Time.now().value());
+        Storage.setValue("timer_was_running", _running);
+
+        if (_running && _deadlineSeconds != null) {
+            Storage.setValue("timer_deadline", _deadlineSeconds);
+        } else {
+            Storage.deleteValue("timer_deadline");
+        }
+    }
+
+    private function completeTimer() as Void {
+        if (_logged) { return; }
+
+        _tickTimer.stop();
+        _running = false;
+        _deadlineSeconds = null;
+        _statusStr = "Paused";
+        _remainingSeconds = 0;
+        updateCachedTimeText();
+
+        _logged = true;
+        buzzFinish();
+
+        var durationMinutes = (_totalSeconds / 60).toNumber();
+        var store = new SessionStore();
+        store.logSession(durationMinutes, _tag);
+        _todayTotal = store.getTodayMinutes();
+        clearSavedState();
+
+        // Sync to cloud
+        getApp().syncSession(durationMinutes, store.todayKey(), _tag);
     }
 
     private function updateCachedTimeText() as Void {
@@ -290,7 +379,7 @@ class TimerView extends WatchUi.View {
         updateRemainingFromClock();
 
         if (_remainingSeconds <= 0) {
-            stopTimer();
+            completeTimer();
             WatchUi.requestUpdate();
             return;
         }
@@ -305,26 +394,6 @@ class TimerView extends WatchUi.View {
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_BLACK);
 
         if (_remainingSeconds <= 0 && !_running) {
-
-            if (!_logged) {
-                _logged = true;
-                buzzFinish();
-                var durationMinutes = (_totalSeconds / 60).toNumber();
-                var store = new SessionStore();
-                store.logSession(durationMinutes, _tag);
-                _todayTotal = store.getTodayMinutes();
-                _todayTotalCached = true;
-                clearSavedState();
-
-                // Sync to cloud
-                getApp().syncSession(durationMinutes, store.todayKey(), _tag);
-            }
-            if (!_todayTotalCached) {
-                var store2 = new SessionStore();
-                _todayTotal = store2.getTodayMinutes();
-                _todayTotalCached = true;
-            }
-
             dc.drawText(
                 _centerX, _doneStarsY,
                 Graphics.FONT_SMALL, "* * *",
