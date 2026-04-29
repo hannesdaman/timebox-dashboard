@@ -148,6 +148,7 @@ h1 span { color: var(--text-dim); font-weight: 300; }
 .feed-section { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 24px; }
 .feed-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
 .feed-section h3 { font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-dim); }
+.feed-summary { font-size: 12px; color: var(--text-dim); }
 .feed-list { display: flex; flex-direction: column; gap: 6px; max-height: 400px; overflow-y: auto; }
 .feed-list::-webkit-scrollbar { width: 4px; }
 .feed-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
@@ -262,6 +263,7 @@ h1 span { color: var(--text-dim); font-weight: 300; }
     <div class="feed-section">
         <div class="feed-header">
             <h3>Session Feed</h3>
+            <div class="feed-summary" id="feedSummary"></div>
         </div>
         <div class="feed-list" id="feedList"><div class="feed-empty">Loading...</div></div>
     </div>
@@ -421,7 +423,7 @@ function quickAdd(mins) {
 }
 
 async function deleteSession(id) {
-    try { await supaFetch('sessions?id=eq.' + id, { method: 'DELETE' }); await refreshAll(); } catch(e) {}
+    try { await supaFetch('sessions?id=eq.' + id, { method: 'DELETE' }); await refreshAll(); } catch(e) { console.error('Delete failed:', e); }
 }
 
 function exportCsv() {
@@ -800,10 +802,24 @@ function buildCumulativeChart(s) {
 }
 
 // ---------- FEED ----------
+function updateFeedSummary(count, isScrollable) {
+    var summary = document.getElementById('feedSummary');
+    if (!summary) return;
+    if (count === 0) {
+        summary.textContent = 'No sessions in this view';
+        return;
+    }
+    summary.textContent = count + ' session' + (count === 1 ? '' : 's') + ' in this view' + (isScrollable ? ' • Scroll for older entries' : '');
+}
+
 function buildFeed(s) {
     var tags = getProjectTags(allSessions);
     var list = document.getElementById('feedList');
-    if (s.length === 0) { list.innerHTML = '<div class="feed-empty">No sessions logged yet.</div>'; return; }
+    if (s.length === 0) {
+        list.innerHTML = '<div class="feed-empty">No sessions logged yet.</div>';
+        updateFeedSummary(0, false);
+        return;
+    }
     var ordered = s.slice().sort(function(a, b) {
         var left = effectiveSessionDate(a) + ' ' + (a.created_at || '');
         var right = effectiveSessionDate(b) + ' ' + (b.created_at || '');
@@ -831,6 +847,7 @@ function buildFeed(s) {
         html += '<div class="feed-item"><div class="feed-item-left"><div class="feed-dot" style="background:' + col + '"></div><div><span class="feed-duration">' + x.duration + ' min</span><div class="feed-meta"><span class="feed-time">' + loggedLabel + ts + '</span>' + rolloverBadge + tagBadge + '</div></div></div><div class="feed-actions"><button class="btn btn-danger" onclick="deleteSession(' + x.id + ')">Delete</button></div></div>';
     });
     list.innerHTML = html;
+    updateFeedSummary(ordered.length, list.scrollHeight > list.clientHeight);
 }
 
 // ---------- RENDER / REFRESH ----------
