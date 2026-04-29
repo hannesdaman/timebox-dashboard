@@ -18,12 +18,6 @@ class SessionStore {
         return info.year * 10000 + info.month * 100 + info.day;
     }
 
-    function statsRefreshCutoffKey() {
-        var cutoff = new Time.Moment(currentSessionMoment().value() - 60 * 86400);
-        var info = Gregorian.info(cutoff, Time.FORMAT_SHORT);
-        return info.year * 10000 + info.month * 100 + info.day;
-    }
-
     function logSession(durationMinutes, tag) {
         var key = todayKey();
         var localId = appendSessionToLedger(durationMinutes, key, tag);
@@ -37,13 +31,13 @@ class SessionStore {
         Storage.setValue("last_local_id", localId);
         Storage.deleteValue("last_remote_id");
 
-        pruneOld(getOptionalDict("mins"), "mins");
-        pruneOld(getOptionalDict("boxes"), "boxes");
+        pruneOld(Storage.getValue("mins"), "mins");
+        pruneOld(Storage.getValue("boxes"), "boxes");
 
         var tagMinsKey = "mins_" + tag;
         var tagBoxesKey = "boxes_" + tag;
-        pruneOld(getOptionalDict(tagMinsKey), tagMinsKey);
-        pruneOld(getOptionalDict(tagBoxesKey), tagBoxesKey);
+        pruneOld(Storage.getValue(tagMinsKey), tagMinsKey);
+        pruneOld(Storage.getValue(tagBoxesKey), tagBoxesKey);
     }
 
     function undoLast() {
@@ -60,14 +54,14 @@ class SessionStore {
         var remoteId = Storage.getValue("last_remote_id");
         if (dur == null || dayKey == null) { return null; }
 
-        var mins = getOptionalDict("mins");
+        var mins = Storage.getValue("mins");
         if (mins != null && mins.hasKey(dayKey)) {
             var val = mins[dayKey] - dur;
             if (val <= 0) { mins.remove(dayKey); } else { mins.put(dayKey, val); }
             Storage.setValue("mins", mins);
         }
 
-        var boxes = getOptionalDict("boxes");
+        var boxes = Storage.getValue("boxes");
         if (boxes != null && boxes.hasKey(dayKey)) {
             var val2 = boxes[dayKey] - 1;
             if (val2 <= 0) { boxes.remove(dayKey); } else { boxes.put(dayKey, val2); }
@@ -77,7 +71,7 @@ class SessionStore {
         // Undo per-tag storage
         if (tag != null) {
             var tagMinsKey = "mins_" + tag;
-            var tagMins = getOptionalDict(tagMinsKey);
+            var tagMins = Storage.getValue(tagMinsKey);
             if (tagMins != null && tagMins.hasKey(dayKey)) {
                 var val3 = tagMins[dayKey] - dur;
                 if (val3 <= 0) { tagMins.remove(dayKey); } else { tagMins.put(dayKey, val3); }
@@ -85,7 +79,7 @@ class SessionStore {
             }
 
             var tagBoxesKey = "boxes_" + tag;
-            var tagBoxes = getOptionalDict(tagBoxesKey);
+            var tagBoxes = Storage.getValue(tagBoxesKey);
             if (tagBoxes != null && tagBoxes.hasKey(dayKey)) {
                 var val4 = tagBoxes[dayKey] - 1;
                 if (val4 <= 0) { tagBoxes.remove(dayKey); } else { tagBoxes.put(dayKey, val4); }
@@ -117,7 +111,6 @@ class SessionStore {
 
     function clearToday() {
         var key = todayKey();
-        var removed = sessionsForDay(key);
         clearDayFromAggregates(key);
         removePendingSessionsForDay(key);
         removeSessionsFromLedgerForDay(key);
@@ -126,12 +119,10 @@ class SessionStore {
         if (lastDay != null && lastDay == key) {
             clearUndoState();
         }
-
-        return removed;
     }
 
     function getTodayMinutes() {
-        var mins = getOptionalDict("mins");
+        var mins = Storage.getValue("mins");
         if (mins == null) { return 0; }
         var key = todayKey();
         if (mins.hasKey(key)) { return mins[key]; }
@@ -139,7 +130,7 @@ class SessionStore {
     }
 
     function getTodayBoxes() {
-        var boxes = getOptionalDict("boxes");
+        var boxes = Storage.getValue("boxes");
         if (boxes == null) { return 0; }
         var key = todayKey();
         if (boxes.hasKey(key)) { return boxes[key]; }
@@ -151,7 +142,7 @@ class SessionStore {
     function getYearMinutes() { return sumPeriod("mins", :year); }
 
     function getTodayMinutesForTag(tag) {
-        var mins = getOptionalDict("mins_" + tag);
+        var mins = Storage.getValue("mins_" + tag);
         if (mins == null) { return 0; }
         var key = todayKey();
         if (mins.hasKey(key)) { return mins[key]; }
@@ -159,7 +150,7 @@ class SessionStore {
     }
 
     function getTodayBoxesForTag(tag) {
-        var boxes = getOptionalDict("boxes_" + tag);
+        var boxes = Storage.getValue("boxes_" + tag);
         if (boxes == null) { return 0; }
         var key = todayKey();
         if (boxes.hasKey(key)) { return boxes[key]; }
@@ -176,7 +167,8 @@ class SessionStore {
         mergeTagData("mins_" + oldTag, "mins_" + newTag);
         mergeTagData("boxes_" + oldTag, "boxes_" + newTag);
 
-        var knownTags = getKnownTags();
+        var knownTags = Storage.getValue("known_tags");
+        if (knownTags == null) { knownTags = []; }
 
         var updatedTags = [];
         for (var i = 0; i < knownTags.size(); i++) {
@@ -230,14 +222,11 @@ class SessionStore {
     }
 
     function getPendingSessions() as Lang.Array {
-        var pending = validateArray(Storage.getValue("pending_sessions"), []);
-        var valid = [];
-        for (var i = 0; i < pending.size(); i++) {
-            if (pending[i] instanceof Lang.Dictionary) {
-                valid.add(pending[i]);
-            }
+        var pending = Storage.getValue("pending_sessions");
+        if (pending == null || !(pending instanceof Lang.Array)) {
+            return [];
         }
-        return valid;
+        return pending;
     }
 
     function peekPendingSession() {
@@ -299,17 +288,8 @@ class SessionStore {
     }
 
     function reconcileRecentWithRemote(rows) as Void {
-        var cutoffKey = statsRefreshCutoffKey();
-        var storageCutoffKey = syncCutoffKey();
+        var cutoffKey = syncCutoffKey();
         var merged = [];
-
-        var existing = getSessionLedger();
-        for (var x = 0; x < existing.size(); x++) {
-            var localSession = normalizeLedgerSession(existing[x], storageCutoffKey);
-            if (localSession != null && localSession["date_key"] < cutoffKey) {
-                merged.add(localSession);
-            }
-        }
 
         if (rows != null && rows instanceof Lang.Array) {
             for (var i = 0; i < rows.size(); i++) {
@@ -340,14 +320,11 @@ class SessionStore {
     }
 
     function getSessionLedger() as Lang.Array {
-        var sessions = validateArray(Storage.getValue("session_ledger"), []);
-        var valid = [];
-        for (var i = 0; i < sessions.size(); i++) {
-            if (sessions[i] instanceof Lang.Dictionary) {
-                valid.add(sessions[i]);
-            }
+        var sessions = Storage.getValue("session_ledger");
+        if (sessions == null || !(sessions instanceof Lang.Array)) {
+            return [];
         }
-        return valid;
+        return sessions;
     }
 
     function saveSessionLedger(sessions) as Void {
@@ -367,7 +344,7 @@ class SessionStore {
     }
 
     private function sumPeriod(storageKey, period) {
-        var data = getOptionalDict(storageKey);
+        var data = Storage.getValue(storageKey);
         if (data == null) { return 0; }
 
         var now = currentSessionMoment();
@@ -431,42 +408,12 @@ class SessionStore {
         }
     }
 
-    private function validateDict(value, defaultValue) {
-        if (value instanceof Lang.Dictionary) { return value; }
-        return defaultValue;
-    }
-
-    private function validateArray(value, defaultValue) {
-        if (value instanceof Lang.Array) { return value; }
-        return defaultValue;
-    }
-
-    private function getDict(storageKey) {
-        return validateDict(Storage.getValue(storageKey), {});
-    }
-
-    private function getOptionalDict(storageKey) {
-        return validateDict(Storage.getValue(storageKey), null);
-    }
-
-    private function getKnownTags() as Lang.Array {
-        var rawTags = validateArray(Storage.getValue("known_tags"), []);
-        var tags = [];
-
-        for (var i = 0; i < rawTags.size(); i++) {
-            if (rawTags[i] instanceof Lang.String && !arrayContains(tags, rawTags[i])) {
-                tags.add(rawTags[i]);
-            }
-        }
-
-        return tags;
-    }
-
     private function mergeTagData(oldKey, newKey) {
-        var oldData = getOptionalDict(oldKey);
+        var oldData = Storage.getValue(oldKey);
         if (oldData == null) { return; }
 
-        var newData = getDict(newKey);
+        var newData = Storage.getValue(newKey);
+        if (newData == null) { newData = {}; }
 
         var keys = oldData.keys();
         for (var i = 0; i < keys.size(); i++) {
@@ -488,27 +435,31 @@ class SessionStore {
     }
 
     private function applySessionToAggregates(dayKey, durationMinutes, tag) as Void {
-        var mins = getDict("mins");
+        var mins = Storage.getValue("mins");
+        if (mins == null) { mins = {}; }
         var existing = 0;
         if (mins.hasKey(dayKey)) { existing = mins[dayKey]; }
         mins.put(dayKey, existing + durationMinutes);
         Storage.setValue("mins", mins);
 
-        var boxes = getDict("boxes");
+        var boxes = Storage.getValue("boxes");
+        if (boxes == null) { boxes = {}; }
         var existingB = 0;
         if (boxes.hasKey(dayKey)) { existingB = boxes[dayKey]; }
         boxes.put(dayKey, existingB + 1);
         Storage.setValue("boxes", boxes);
 
         var tagMinsKey = "mins_" + tag;
-        var tagMins = getDict(tagMinsKey);
+        var tagMins = Storage.getValue(tagMinsKey);
+        if (tagMins == null) { tagMins = {}; }
         var existingT = 0;
         if (tagMins.hasKey(dayKey)) { existingT = tagMins[dayKey]; }
         tagMins.put(dayKey, existingT + durationMinutes);
         Storage.setValue(tagMinsKey, tagMins);
 
         var tagBoxesKey = "boxes_" + tag;
-        var tagBoxes = getDict(tagBoxesKey);
+        var tagBoxes = Storage.getValue(tagBoxesKey);
+        if (tagBoxes == null) { tagBoxes = {}; }
         var existingTB = 0;
         if (tagBoxes.hasKey(dayKey)) { existingTB = tagBoxes[dayKey]; }
         tagBoxes.put(dayKey, existingTB + 1);
@@ -518,30 +469,31 @@ class SessionStore {
     }
 
     private function clearDayFromAggregates(dayKey) as Void {
-        var mins = getOptionalDict("mins");
+        var mins = Storage.getValue("mins");
         if (mins != null && mins.hasKey(dayKey)) {
             mins.remove(dayKey);
             Storage.setValue("mins", mins);
         }
 
-        var boxes = getOptionalDict("boxes");
+        var boxes = Storage.getValue("boxes");
         if (boxes != null && boxes.hasKey(dayKey)) {
             boxes.remove(dayKey);
             Storage.setValue("boxes", boxes);
         }
 
-        var knownTags = getKnownTags();
+        var knownTags = Storage.getValue("known_tags");
+        if (knownTags == null) { return; }
 
         for (var i = 0; i < knownTags.size(); i++) {
             var tagMinsKey = "mins_" + knownTags[i];
-            var tagMins = getOptionalDict(tagMinsKey);
+            var tagMins = Storage.getValue(tagMinsKey);
             if (tagMins != null && tagMins.hasKey(dayKey)) {
                 tagMins.remove(dayKey);
                 Storage.setValue(tagMinsKey, tagMins);
             }
 
             var tagBoxesKey = "boxes_" + knownTags[i];
-            var tagBoxes = getOptionalDict(tagBoxesKey);
+            var tagBoxes = Storage.getValue(tagBoxesKey);
             if (tagBoxes != null && tagBoxes.hasKey(dayKey)) {
                 tagBoxes.remove(dayKey);
                 Storage.setValue(tagBoxesKey, tagBoxes);
@@ -577,34 +529,9 @@ class SessionStore {
         }
     }
 
-    private function sessionsForDay(dayKey) as Lang.Array {
-        var removed = [];
-        var sessions = getSessionLedger();
-
-        for (var i = 0; i < sessions.size(); i++) {
-            if (sessions[i]["date_key"] == dayKey) {
-                removed.add({
-                    "local_id" => sessions[i]["local_id"],
-                    "remote_id" => sessions[i]["remote_id"]
-                });
-            }
-        }
-
-        var pending = getPendingSessions();
-        for (var j = 0; j < pending.size(); j++) {
-            if (pending[j]["date_key"] == dayKey) {
-                removed.add({
-                    "local_id" => pending[j]["local_id"],
-                    "remote_id" => null
-                });
-            }
-        }
-
-        return removed;
-    }
-
     private function ensureKnownTag(tag) as Void {
-        var knownTags = getKnownTags();
+        var knownTags = Storage.getValue("known_tags");
+        if (knownTags == null) { knownTags = []; }
         if (!arrayContains(knownTags, tag)) {
             knownTags.add(tag);
             Storage.setValue("known_tags", knownTags);
@@ -677,7 +604,8 @@ class SessionStore {
         Storage.setValue("mins", {});
         Storage.setValue("boxes", {});
 
-        var knownTags = getKnownTags();
+        var knownTags = Storage.getValue("known_tags");
+        if (knownTags == null) { knownTags = []; }
 
         for (var i = 0; i < knownTags.size(); i++) {
             Storage.setValue("mins_" + knownTags[i], {});

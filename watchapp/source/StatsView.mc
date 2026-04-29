@@ -14,7 +14,6 @@ class StatsView extends WatchUi.View {
         View.initialize();
         _store = new SessionStore();
         _messageTimer = new Timer.Timer();
-        getApp().resetSyncRetryBackoff();
         getApp().syncPendingSessions();
         getApp().refreshStatsFromCloud();
         // Build ["All", project1, project2, ...] from on-watch project storage
@@ -36,8 +35,7 @@ class StatsView extends WatchUi.View {
 
     function resetToday() {
         var today = _store.todayKey();
-        var removed = _store.clearToday();
-        getApp().queueRemovedSessionsForInFlightDelete(removed);
+        _store.clearToday();
         getApp().deleteSessionsForDate(today);
         _message = "Today reset!";
         WatchUi.requestUpdate();
@@ -50,7 +48,9 @@ class StatsView extends WatchUi.View {
             _message = "Nothing to undo";
         } else {
             _message = "-" + info["duration"] + " min removed";
-            getApp().deleteSessionForUndo(info["local_id"], info["remote_id"]);
+            if (info["remote_id"] != null) {
+                getApp().deleteSessionById(info["remote_id"]);
+            }
         }
         WatchUi.requestUpdate();
         _messageTimer.start(method(:onMessageTimeout), 2000, false);

@@ -14,20 +14,16 @@ class watchappApp extends Application.AppBase {
     var _refreshingStats = false;
     var _refreshStatsQueued = false;
     var _syncRetryTimer = null;
-    var _syncRetryDelays = null;
-    var _syncRetryIndex = 0;
-    var _timerActive = false;
-    var _deleteAfterSyncLocalIds = null;
+    var _syncRetryDelayMs = 15000;
 
     function initialize() {
         AppBase.initialize();
         _syncRetryTimer = new Timer.Timer();
-        _syncRetryDelays = [30000, 60000, 120000, 300000, 600000];
-        _deleteAfterSyncLocalIds = [];
     }
 
     function onStart(state as Dictionary?) as Void {
         syncPendingSessions();
+        refreshStatsFromCloud();
     }
 
     function onStop(state as Dictionary?) as Void {
@@ -81,10 +77,7 @@ class watchappApp extends Application.AppBase {
 
         var store = new SessionStore();
         var nextPending = store.peekPendingSession();
-        if (nextPending == null) {
-            resetSyncRetryBackoff();
-            return;
-        }
+        if (nextPending == null) { return; }
 
         _syncingLocalId = nextPending["local_id"];
 
@@ -142,41 +135,7 @@ class watchappApp extends Application.AppBase {
         Communications.makeWebRequest(url, null, options, method(:onDeleteByIdResponse));
     }
 
-    function deleteSessionForUndo(localId, remoteId) as Void {
-        if ((remoteId instanceof Lang.Number) || (remoteId instanceof Lang.Long)) {
-            deleteSessionById(remoteId);
-        } else {
-            queueDeleteForInFlightLocalId(localId);
-        }
-    }
-
-    function queueRemovedSessionsForInFlightDelete(sessions) as Void {
-        if (!(sessions instanceof Lang.Array)) { return; }
-
-        for (var i = 0; i < sessions.size(); i++) {
-            if (sessions[i] instanceof Lang.Dictionary) {
-                queueDeleteForInFlightLocalId(sessions[i]["local_id"]);
-            }
-        }
-    }
-
-    function setTimerActive(active as Lang.Boolean) as Void {
-        _timerActive = active;
-        if (!_timerActive && _refreshStatsQueued) {
-            refreshStatsFromCloud();
-        }
-    }
-
-    function isTimerActive() as Lang.Boolean {
-        return _timerActive || TimerView.hasRestorableState();
-    }
-
     function refreshStatsFromCloud() as Void {
-        if (isTimerActive()) {
-            _refreshStatsQueued = true;
-            return;
-        }
-
         if (_refreshingStats) {
             _refreshStatsQueued = true;
             return;
@@ -194,8 +153,8 @@ class watchappApp extends Application.AppBase {
         _refreshStatsQueued = false;
         _refreshingStats = true;
 
-        var cutoff = formatDateKey(store.statsRefreshCutoffKey());
-        var url = SUPABASE_URL + "?select=id,session_date,created_at,duration,tag&session_date=gte." + cutoff + "&order=session_date.desc,id.desc&limit=200";
+        var cutoff = formatDateKey(store.syncCutoffKey());
+        var url = SUPABASE_URL + "?select=id,session_date,created_at,duration,tag&session_date=gte." + cutoff + "&order=session_date.asc,id.asc&limit=5000";
         var options = {
             :method => Communications.HTTP_REQUEST_METHOD_GET,
             :headers => {
@@ -213,25 +172,16 @@ class watchappApp extends Application.AppBase {
         _syncingLocalId = null;
 
         if (responseCode == 201 || responseCode == 200) {
-            resetSyncRetryBackoff();
             var store = new SessionStore();
             var rows = responseRows(data);
-            var remoteId = null;
             if (rows.size() > 0) {
                 var firstRow = rows[0];
                 if (firstRow instanceof Lang.Dictionary && firstRow.hasKey("id")) {
-                    remoteId = firstRow["id"];
-                    if (!isQueuedDeleteLocalId(completedLocalId)) {
-                        store.setLastRemoteIdForLocalId(completedLocalId, remoteId);
-                    }
+                    store.setLastRemoteIdForLocalId(completedLocalId, firstRow["id"]);
                 }
             }
 
             store.removePendingSessionByLocalId(completedLocalId);
-            if (removeQueuedDeleteLocalId(completedLocalId) && remoteId != null) {
-                deleteSessionById(remoteId);
-            }
-
             if (store.peekPendingSession() != null) {
                 syncPendingSessions();
             } else if (_refreshingStats) {
@@ -240,33 +190,20 @@ class watchappApp extends Application.AppBase {
                 refreshStatsFromCloud();
             }
         } else {
-            removeQueuedDeleteLocalId(completedLocalId);
-            var retryStore = new SessionStore();
-            if (retryStore.peekPendingSession() != null) {
-                scheduleSyncRetry();
-            } else {
-                resetSyncRetryBackoff();
-            }
+            scheduleSyncRetry();
         }
     }
 
     function onDeleteResponse(responseCode as Lang.Number, data as Lang.Dictionary or Lang.String or Null) as Void {
-        if (responseCode == 204 || responseCode == 200) {
-            resetSyncRetryBackoff();
-        }
     }
 
     function onDeleteByIdResponse(responseCode as Lang.Number, data as Lang.Dictionary or Lang.String or Null) as Void {
-        if (responseCode == 204 || responseCode == 200) {
-            resetSyncRetryBackoff();
-        }
     }
 
     function onStatsRefreshResponse(responseCode as Lang.Number, data as Lang.Dictionary or Lang.String or PersistedContent.Iterator or Null) as Void {
         _refreshingStats = false;
 
         if (responseCode == 200) {
-            resetSyncRetryBackoff();
             if (canInterpretRows(data)) {
                 var store = new SessionStore();
                 store.reconcileRecentWithRemote(responseRows(data));
@@ -283,12 +220,7 @@ class watchappApp extends Application.AppBase {
         if (_syncRetryTimer == null) {
             _syncRetryTimer = new Timer.Timer();
         }
-
-        var delay = _syncRetryDelays[_syncRetryIndex];
-        if (_syncRetryIndex < _syncRetryDelays.size() - 1) {
-            _syncRetryIndex += 1;
-        }
-        _syncRetryTimer.start(method(:onSyncRetryTimer), delay, false);
+        _syncRetryTimer.start(method(:onSyncRetryTimer), _syncRetryDelayMs, false);
     }
 
     private function cancelSyncRetry() as Void {
@@ -299,44 +231,6 @@ class watchappApp extends Application.AppBase {
 
     function onSyncRetryTimer() as Void {
         syncPendingSessions();
-    }
-
-    function resetSyncRetryBackoff() as Void {
-        _syncRetryIndex = 0;
-    }
-
-    private function queueDeleteForInFlightLocalId(localId) as Void {
-        if (localId == null || _syncingLocalId == null) { return; }
-        if (!_syncingLocalId.equals(localId)) { return; }
-        if (isQueuedDeleteLocalId(localId)) { return; }
-        _deleteAfterSyncLocalIds.add(localId);
-    }
-
-    private function isQueuedDeleteLocalId(localId) as Lang.Boolean {
-        if (localId == null || _deleteAfterSyncLocalIds == null) { return false; }
-
-        for (var i = 0; i < _deleteAfterSyncLocalIds.size(); i++) {
-            if (_deleteAfterSyncLocalIds[i].equals(localId)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private function removeQueuedDeleteLocalId(localId) as Lang.Boolean {
-        if (localId == null || _deleteAfterSyncLocalIds == null) { return false; }
-
-        var updated = [];
-        var removed = false;
-        for (var i = 0; i < _deleteAfterSyncLocalIds.size(); i++) {
-            if (_deleteAfterSyncLocalIds[i].equals(localId)) {
-                removed = true;
-            } else {
-                updated.add(_deleteAfterSyncLocalIds[i]);
-            }
-        }
-        _deleteAfterSyncLocalIds = updated;
-        return removed;
     }
 }
 
