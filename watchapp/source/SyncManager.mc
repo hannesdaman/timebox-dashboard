@@ -1,5 +1,4 @@
 import Toybox.Communications;
-import Toybox.System;
 
 // Helper to format dateKey to string
 function formatDateKey(dateKey) {

@@ -679,15 +679,21 @@ class SessionStore {
     }
 
     private function effectiveDateKeyForRemoteRow(row) {
-        var createdAt = row["created_at"];
-        var createdAtKey = parseCreatedAtToDateKey(createdAt);
-        if (createdAtKey != 0) {
-            return createdAtKey;
+        var sessionDateKey = parseDateString(row["session_date"]);
+        var rolledCreatedAtKey = parseCreatedAtToDateKey(row["created_at"], true);
+
+        if (sessionDateKey != 0) {
+            var loggedCreatedAtKey = parseCreatedAtToDateKey(row["created_at"], false);
+            if (loggedCreatedAtKey != 0 && loggedCreatedAtKey == sessionDateKey && rolledCreatedAtKey != 0 && rolledCreatedAtKey != loggedCreatedAtKey) {
+                return rolledCreatedAtKey;
+            }
+            return sessionDateKey;
         }
-        return parseDateString(row["session_date"]);
+
+        return rolledCreatedAtKey;
     }
 
-    private function parseCreatedAtToDateKey(value) {
+    private function parseCreatedAtToDateKey(value, applyRollover as Lang.Boolean) {
         if (!(value instanceof Lang.String) || value.length() < 19) { return 0; }
 
         try {
@@ -722,8 +728,11 @@ class SessionStore {
                 }
             }
 
-            var shiftedMoment = new Time.Moment(utcMoment.value() - sessionDayRolloverSeconds());
-            var localInfo = Gregorian.info(shiftedMoment, Time.FORMAT_SHORT);
+            var localMoment = utcMoment;
+            if (applyRollover) {
+                localMoment = new Time.Moment(utcMoment.value() - sessionDayRolloverSeconds());
+            }
+            var localInfo = Gregorian.info(localMoment, Time.FORMAT_SHORT);
             return localInfo.year * 10000 + localInfo.month * 100 + localInfo.day;
         } catch(e instanceof Lang.Exception) {
             return 0;
