@@ -80,6 +80,7 @@ class TimerView extends WatchUi.View {
         _discardOnHide = true;
         _rootRestoredLaunch = false;
         clearSavedState();
+        getApp().setTimerActive(false);
     }
 
     function wasRestoredRunning() {
@@ -113,6 +114,7 @@ class TimerView extends WatchUi.View {
             startTimer();
         } else {
             persistTimerState();
+            getApp().setTimerActive(true);
         }
         WatchUi.requestUpdate();
     }
@@ -122,6 +124,10 @@ class TimerView extends WatchUi.View {
     }
 
     function onShow() {
+        if (_remainingSeconds > 0) {
+            getApp().setTimerActive(true);
+        }
+
         if (_remainingSeconds > 0 && !_running && _resumeOnShow) {
             applyRestoredRunningState();
             if (_remainingSeconds > 0) {
@@ -137,6 +143,7 @@ class TimerView extends WatchUi.View {
             _discardOnHide = false;
             clearSavedState();
             stopTimer();
+            getApp().setTimerActive(false);
             return;
         }
 
@@ -151,8 +158,10 @@ class TimerView extends WatchUi.View {
         if (_remainingSeconds > 0) {
             _resumeOnShow = _running;
             persistTimerState();
+            getApp().setTimerActive(true);
         } else {
             clearSavedState();
+            getApp().setTimerActive(false);
         }
         stopTimer();
     }
@@ -221,6 +230,7 @@ class TimerView extends WatchUi.View {
 
         _running = true;
         _statusStr = "Running";
+        getApp().setTimerActive(true);
         persistTimerState();
         _tickTimer.start(method(:onTick), 1000, true);
     }
@@ -315,7 +325,10 @@ class TimerView extends WatchUi.View {
         clearSavedState();
 
         // Sync to cloud
-        getApp().syncSession(durationMinutes, store.todayKey(), _tag);
+        var app = getApp();
+        app.syncSession(durationMinutes, store.todayKey(), _tag);
+        app.setTimerActive(false);
+        app.refreshStatsFromCloud();
     }
 
     private function updateCachedTimeText() as Void {
