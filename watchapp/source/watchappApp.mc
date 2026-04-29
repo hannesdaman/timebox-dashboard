@@ -2,7 +2,7 @@ import Toybox.Application;
 import Toybox.Lang;
 import Toybox.WatchUi;
 import Toybox.Communications;
-import Toybox.Timer;
+import Toybox.System;
 import Toybox.Application.Storage;
 import Toybox.PersistedContent;
 
@@ -13,23 +13,16 @@ class watchappApp extends Application.AppBase {
     var _syncingLocalId = null;
     var _refreshingStats = false;
     var _refreshStatsQueued = false;
-    var _syncRetryTimer = null;
-    var _syncRetryDelayMs = 15000;
 
     function initialize() {
         AppBase.initialize();
-        _syncRetryTimer = new Timer.Timer();
     }
 
     function onStart(state as Dictionary?) as Void {
         syncPendingSessions();
-        refreshStatsFromCloud();
     }
 
     function onStop(state as Dictionary?) as Void {
-        if (_syncRetryTimer != null) {
-            _syncRetryTimer.stop();
-        }
     }
 
     function onSettingsChanged() as Void {
@@ -72,7 +65,6 @@ class watchappApp extends Application.AppBase {
     }
 
     function syncPendingSessions() as Void {
-        cancelSyncRetry();
         if (_syncingLocalId != null) { return; }
 
         var store = new SessionStore();
@@ -136,17 +128,12 @@ class watchappApp extends Application.AppBase {
     }
 
     function refreshStatsFromCloud() as Void {
-        if (_refreshingStats) {
-            _refreshStatsQueued = true;
-            return;
-        }
+        if (_refreshingStats) { return; }
 
         var store = new SessionStore();
-        if (store.peekPendingSession() != null) {
+        if (_syncingLocalId != null || store.peekPendingSession() != null) {
             _refreshStatsQueued = true;
-            if (_syncingLocalId == null) {
-                syncPendingSessions();
-            }
+            syncPendingSessions();
             return;
         }
 
@@ -182,22 +169,31 @@ class watchappApp extends Application.AppBase {
             }
 
             store.removePendingSessionByLocalId(completedLocalId);
+            System.println("Sync OK");
             if (store.peekPendingSession() != null) {
                 syncPendingSessions();
-            } else if (_refreshingStats) {
-                _refreshStatsQueued = true;
             } else if (_refreshStatsQueued) {
                 refreshStatsFromCloud();
             }
         } else {
-            scheduleSyncRetry();
+            System.println("Sync FAILED: " + responseCode);
         }
     }
 
     function onDeleteResponse(responseCode as Lang.Number, data as Lang.Dictionary or Lang.String or Null) as Void {
+        if (responseCode == 204 || responseCode == 200) {
+            System.println("Delete sync OK");
+        } else {
+            System.println("Delete sync FAILED: " + responseCode);
+        }
     }
 
     function onDeleteByIdResponse(responseCode as Lang.Number, data as Lang.Dictionary or Lang.String or Null) as Void {
+        if (responseCode == 204 || responseCode == 200) {
+            System.println("Undo delete sync OK");
+        } else {
+            System.println("Undo delete sync FAILED: " + responseCode);
+        }
     }
 
     function onStatsRefreshResponse(responseCode as Lang.Number, data as Lang.Dictionary or Lang.String or PersistedContent.Iterator or Null) as Void {
@@ -208,29 +204,13 @@ class watchappApp extends Application.AppBase {
                 var store = new SessionStore();
                 store.reconcileRecentWithRemote(responseRows(data));
                 WatchUi.requestUpdate();
+                System.println("Stats refresh OK");
+            } else {
+                System.println("Stats refresh skipped unsupported payload");
             }
+        } else {
+            System.println("Stats refresh FAILED: " + responseCode);
         }
-
-        if (_refreshStatsQueued) {
-            refreshStatsFromCloud();
-        }
-    }
-
-    private function scheduleSyncRetry() as Void {
-        if (_syncRetryTimer == null) {
-            _syncRetryTimer = new Timer.Timer();
-        }
-        _syncRetryTimer.start(method(:onSyncRetryTimer), _syncRetryDelayMs, false);
-    }
-
-    private function cancelSyncRetry() as Void {
-        if (_syncRetryTimer != null) {
-            _syncRetryTimer.stop();
-        }
-    }
-
-    function onSyncRetryTimer() as Void {
-        syncPendingSessions();
     }
 }
 

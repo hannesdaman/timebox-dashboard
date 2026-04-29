@@ -61,12 +61,6 @@ class StatsView extends WatchUi.View {
         WatchUi.requestUpdate();
     }
 
-    function onHide() as Void {
-        if (_messageTimer != null) {
-            _messageTimer.stop();
-        }
-    }
-
     function onUpdate(dc) {
         dc.clear();
 
