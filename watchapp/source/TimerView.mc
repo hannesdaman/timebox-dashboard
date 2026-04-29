@@ -13,11 +13,34 @@ class TimerView extends WatchUi.View {
     private var _label;
     private var _tag;
     private var _tickTimer;
+    private var _deadlineSeconds = null;
     private var _running = false;
     private var _logged = false;
     private var _resumeOnShow = true;
     private var _rootRestoredLaunch = false;
     private var _discardOnHide = false;
+    private var _timeStr = "";
+    private var _statusStr = "Paused";
+    private var _doneDurationStr = "";
+    private var _todayTotal = 0;
+    private var _todayTotalCached = false;
+    private var _layoutWidth = null;
+    private var _layoutHeight = null;
+    private var _centerX = 0;
+    private var _doneStarsY = 0;
+    private var _doneTitleY = 0;
+    private var _doneDurationY = 0;
+    private var _doneTodayY = 0;
+    private var _doneBackY = 0;
+    private var _timerTagY = 0;
+    private var _timerTimeY = 0;
+    private var _timerStatusY = 0;
+    private var _timerStartX = 0;
+    private var _timerStartY = 0;
+    private var _timerBackX = 0;
+    private var _timerBackY = 0;
+    private var _timerResetX = 0;
+    private var _timerResetY = 0;
 
     function initialize(totalSeconds, label, tag) {
         WatchUi.View.initialize();
@@ -26,6 +49,8 @@ class TimerView extends WatchUi.View {
         _label = label;
         _tag = tag;
         _tickTimer = new Timer.Timer();
+        updateCachedTimeText();
+        updateCachedDurationText();
     }
 
     function restoreState(remaining, total, label, wasRunning) {
@@ -34,6 +59,10 @@ class TimerView extends WatchUi.View {
         _remainingSeconds = remaining;
         _resumeOnShow = (wasRunning == true);
         _running = false;
+        _deadlineSeconds = null;
+        _statusStr = "Paused";
+        updateCachedTimeText();
+        updateCachedDurationText();
     }
 
     function markRootRestoredLaunch() {
@@ -69,7 +98,10 @@ class TimerView extends WatchUi.View {
         var wasRunning = _running;
         stopTimer();
         _logged = false;
+        _todayTotal = 0;
+        _todayTotalCached = false;
         _remainingSeconds = _totalSeconds;
+        updateCachedTimeText();
         if (wasRunning) {
             startTimer();
         }
@@ -87,12 +119,15 @@ class TimerView extends WatchUi.View {
                 var elapsed = Time.now().value() - savedAt.toNumber();
                 if (elapsed > 0) {
                     _remainingSeconds -= elapsed;
-                    if (_remainingSeconds < 0) {
+                    if (_remainingSeconds <= 0) {
                         _remainingSeconds = 0;
                     }
+                    updateCachedTimeText();
                 }
             }
-            startTimer();
+            if (_remainingSeconds > 0) {
+                startTimer();
+            }
         }
         _resumeOnShow = false;
         WatchUi.requestUpdate();
@@ -105,6 +140,8 @@ class TimerView extends WatchUi.View {
             stopTimer();
             return;
         }
+
+        updateRemainingFromClock();
 
         // Save state so we can resume later
         if (_remainingSeconds > 0) {
@@ -165,12 +202,69 @@ class TimerView extends WatchUi.View {
     private function startTimer() {
         if (_running) { return; }
         _running = true;
+        _deadlineSeconds = Time.now().value() + _remainingSeconds;
+        _statusStr = "Running";
         _tickTimer.start(method(:onTick), 1000, true);
     }
 
     private function stopTimer() {
+        updateRemainingFromClock();
         _running = false;
+        _deadlineSeconds = null;
+        _statusStr = "Paused";
         _tickTimer.stop();
+    }
+
+    private function updateRemainingFromClock() as Void {
+        if (!_running || _deadlineSeconds == null) { return; }
+
+        var remaining = _deadlineSeconds - Time.now().value();
+        if (remaining < 0) {
+            remaining = 0;
+        }
+
+        if (remaining != _remainingSeconds) {
+            _remainingSeconds = remaining;
+            updateCachedTimeText();
+        }
+    }
+
+    private function updateCachedTimeText() as Void {
+        var mm = (_remainingSeconds / 60).toNumber();
+        var ss = (_remainingSeconds % 60).toNumber();
+        var ssStr = (ss < 10) ? ("0" + ss) : ("" + ss);
+        _timeStr = ("" + mm) + ":" + ssStr;
+    }
+
+    private function updateCachedDurationText() as Void {
+        var durationMin = (_totalSeconds / 60).toNumber();
+        _doneDurationStr = "+" + durationMin + " min";
+    }
+
+    private function cacheLayout(dc) as Void {
+        var w = dc.getWidth();
+        var h = dc.getHeight();
+        if (_layoutWidth == w && _layoutHeight == h) { return; }
+
+        _layoutWidth = w;
+        _layoutHeight = h;
+        _centerX = w / 2;
+
+        _doneStarsY = (h * 0.22).toNumber();
+        _doneTitleY = (h * 0.38).toNumber();
+        _doneDurationY = (h * 0.55).toNumber();
+        _doneTodayY = (h * 0.72).toNumber();
+        _doneBackY = (h * 0.85).toNumber();
+
+        _timerTagY = (h * 0.18).toNumber();
+        _timerTimeY = (h * 0.43).toNumber();
+        _timerStatusY = (h * 0.65).toNumber();
+        _timerStartX = (w * 0.80).toNumber();
+        _timerStartY = (h * 0.23).toNumber();
+        _timerBackX = (w * 0.78).toNumber();
+        _timerBackY = (h * 0.72).toNumber();
+        _timerResetX = (w * 0.22).toNumber();
+        _timerResetY = _timerBackY;
     }
 
     private function buzzFinish() {
@@ -189,16 +283,16 @@ class TimerView extends WatchUi.View {
     }
 
     function onTick() {
+        if (!_running) {
+            return;
+        }
+
+        updateRemainingFromClock();
+
         if (_remainingSeconds <= 0) {
             stopTimer();
             WatchUi.requestUpdate();
             return;
-        }
-
-        _remainingSeconds -= 1;
-
-        if (_remainingSeconds <= 0) {
-            stopTimer();
         }
 
         WatchUi.requestUpdate();
@@ -206,9 +300,7 @@ class TimerView extends WatchUi.View {
 
     function onUpdate(dc) {
         dc.clear();
-
-        var w = dc.getWidth();
-        var h = dc.getHeight();
+        cacheLayout(dc);
 
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_BLACK);
 
@@ -220,88 +312,84 @@ class TimerView extends WatchUi.View {
                 var durationMinutes = (_totalSeconds / 60).toNumber();
                 var store = new SessionStore();
                 store.logSession(durationMinutes, _tag);
+                _todayTotal = store.getTodayMinutes();
+                _todayTotalCached = true;
                 clearSavedState();
 
                 // Sync to cloud
                 getApp().syncSession(durationMinutes, store.todayKey(), _tag);
             }
-
-            var durationMin = (_totalSeconds / 60).toNumber();
+            if (!_todayTotalCached) {
+                var store2 = new SessionStore();
+                _todayTotal = store2.getTodayMinutes();
+                _todayTotalCached = true;
+            }
 
             dc.drawText(
-                w / 2, (h * 0.22).toNumber(),
+                _centerX, _doneStarsY,
                 Graphics.FONT_SMALL, "* * *",
                 Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
             );
 
             dc.drawText(
-                w / 2, (h * 0.38).toNumber(),
+                _centerX, _doneTitleY,
                 Graphics.FONT_MEDIUM, "WELL DONE!",
                 Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
             );
 
             dc.drawText(
-                w / 2, (h * 0.55).toNumber(),
-                Graphics.FONT_SMALL, "+" + durationMin + " min",
-                Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
-            );
-
-            var store2 = new SessionStore();
-            var todayTotal = store2.getTodayMinutes();
-
-            dc.drawText(
-                w / 2, (h * 0.72).toNumber(),
-                Graphics.FONT_XTINY, "Today: " + todayTotal + " min",
+                _centerX, _doneDurationY,
+                Graphics.FONT_SMALL, _doneDurationStr,
                 Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
             );
 
             dc.drawText(
-                w / 2, (h * 0.85).toNumber(),
+                _centerX, _doneTodayY,
+                Graphics.FONT_XTINY, "Today: " + _todayTotal + " min",
+                Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
+            );
+
+            dc.drawText(
+                _centerX, _doneBackY,
                 Graphics.FONT_XTINY, "BACK to menu",
                 Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
             );
 
         } else {
             dc.drawText(
-                w / 2, (h * 0.18).toNumber(),
+                _centerX, _timerTagY,
                 Graphics.FONT_SMALL, _tag,
                 Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
             );
 
-            var mm = (_remainingSeconds / 60).toNumber();
-            var ss = (_remainingSeconds % 60).toNumber();
-            var ssStr = (ss < 10) ? ("0" + ss) : ("" + ss);
-            var timeStr = ("" + mm) + ":" + ssStr;
-
             dc.drawText(
-                w / 2, (h * 0.43).toNumber(),
-                Graphics.FONT_NUMBER_HOT, timeStr,
+                _centerX, _timerTimeY,
+                Graphics.FONT_NUMBER_HOT, _timeStr,
                 Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
             );
 
-            var statusStr = _running ? "Running" : "Paused";
             dc.drawText(
-                w / 2, (h * 0.65).toNumber(),
-                Graphics.FONT_XTINY, statusStr,
+                _centerX, _timerStatusY,
+                Graphics.FONT_XTINY, _statusStr,
                 Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
             );
 
             dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_BLACK);
 
             dc.drawText(
-                (w * 0.80).toNumber(), (h * 0.23).toNumber(),
+                _timerStartX, _timerStartY,
                 Graphics.FONT_XTINY, "START",
                 Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
             );
 
             dc.drawText(
-                (w * 0.78).toNumber(), (h * 0.72).toNumber(),
+                _timerBackX, _timerBackY,
                 Graphics.FONT_XTINY, "BACK",
                 Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
             );
 
             dc.drawText(
-                (w * 0.22).toNumber(), (h * 0.72).toNumber(),
+                _timerResetX, _timerResetY,
                 Graphics.FONT_XTINY, "RESET",
                 Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
             );
