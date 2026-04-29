@@ -28,9 +28,6 @@ class watchappApp extends Application.AppBase {
 
     function onStart(state as Dictionary?) as Void {
         syncPendingSessions();
-        if (!isTimerActive()) {
-            refreshStatsFromCloud();
-        }
     }
 
     function onStop(state as Dictionary?) as Void {
