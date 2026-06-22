@@ -217,13 +217,19 @@ class TimerView extends WatchUi.View {
             if (!_logged) {
                 _logged = true;
                 buzzFinish();
-                var durationMinutes = (_totalSeconds / 60).toNumber();
-                var store = new SessionStore();
-                store.logSession(durationMinutes, _tag);
-                clearSavedState();
+                try {
+                    var durationMinutes = (_totalSeconds / 60).toNumber();
+                    var store = new SessionStore();
+                    store.logSession(durationMinutes, _tag);
+                    clearSavedState();
 
-                // Sync to cloud
-                getApp().syncSession(durationMinutes, store.todayKey(), _tag);
+                    // Sync to cloud
+                    getApp().syncSession(durationMinutes, store.todayKey(), _tag);
+                } catch (e instanceof Lang.Exception) {
+                    // A storage/sync hiccup must never crash the finish screen.
+                    // Leave a breadcrumb we can read back instead of showing "IQ!".
+                    Storage.setValue("last_finish_error", e.getErrorMessage());
+                }
             }
 
             var durationMin = (_totalSeconds / 60).toNumber();

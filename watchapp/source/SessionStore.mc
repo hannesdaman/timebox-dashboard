@@ -20,9 +20,15 @@ class SessionStore {
 
     function logSession(durationMinutes, tag) {
         var key = todayKey();
-        var localId = appendSessionToLedger(durationMinutes, key, tag);
-        applySessionToAggregates(key, durationMinutes, tag);
+        var localId = nextLocalSessionId();
+
+        // Persist the cloud-sync queue and the lightweight daily aggregates FIRST,
+        // then the heavier session ledger. The ledger is the memory-hungry step, so
+        // if it ever runs the heap dry the session has already reached the dashboard
+        // queue and today's totals instead of being lost.
         queuePendingSession(localId, durationMinutes, key, tag);
+        applySessionToAggregates(key, durationMinutes, tag);
+        appendSessionToLedger(localId, durationMinutes, key, tag);
 
         // Save last session for undo
         Storage.setValue("last_dur", durationMinutes);
@@ -122,19 +128,11 @@ class SessionStore {
     }
 
     function getTodayMinutes() {
-        var mins = Storage.getValue("mins");
-        if (mins == null) { return 0; }
-        var key = todayKey();
-        if (mins.hasKey(key)) { return mins[key]; }
-        return 0;
+        return asNumber(readDict("mins")[todayKey()]);
     }
 
     function getTodayBoxes() {
-        var boxes = Storage.getValue("boxes");
-        if (boxes == null) { return 0; }
-        var key = todayKey();
-        if (boxes.hasKey(key)) { return boxes[key]; }
-        return 0;
+        return asNumber(readDict("boxes")[todayKey()]);
     }
 
     function getWeekMinutes() { return sumPeriod("mins", :week); }
@@ -142,19 +140,11 @@ class SessionStore {
     function getYearMinutes() { return sumPeriod("mins", :year); }
 
     function getTodayMinutesForTag(tag) {
-        var mins = Storage.getValue("mins_" + tag);
-        if (mins == null) { return 0; }
-        var key = todayKey();
-        if (mins.hasKey(key)) { return mins[key]; }
-        return 0;
+        return asNumber(readDict("mins_" + tag)[todayKey()]);
     }
 
     function getTodayBoxesForTag(tag) {
-        var boxes = Storage.getValue("boxes_" + tag);
-        if (boxes == null) { return 0; }
-        var key = todayKey();
-        if (boxes.hasKey(key)) { return boxes[key]; }
-        return 0;
+        return asNumber(readDict("boxes_" + tag)[todayKey()]);
     }
 
     function getWeekMinutesForTag(tag) { return sumPeriod("mins_" + tag, :week); }
@@ -328,11 +318,20 @@ class SessionStore {
     }
 
     function saveSessionLedger(sessions) as Void {
+        // Cap the local ledger to the most recent entries. Supabase holds the full
+        // history (the dashboard reads it directly); an unbounded ledger eventually
+        // exhausts the watch's per-app heap, and re-saving it here was crashing
+        // logSession with an uncatchable Out Of Memory Error on timer finish.
+        var maxEntries = 50;
         var trimmed = [];
-        var cutoffKey = syncCutoffKey();
 
         if (sessions instanceof Lang.Array) {
-            for (var i = 0; i < sessions.size(); i++) {
+            var cutoffKey = syncCutoffKey();
+            var start = 0;
+            if (sessions.size() > maxEntries) {
+                start = sessions.size() - maxEntries;
+            }
+            for (var i = start; i < sessions.size(); i++) {
                 var session = normalizeLedgerSession(sessions[i], cutoffKey);
                 if (session != null) {
                     trimmed.add(session);
@@ -344,8 +343,8 @@ class SessionStore {
     }
 
     private function sumPeriod(storageKey, period) {
-        var data = Storage.getValue(storageKey);
-        if (data == null) { return 0; }
+        var data = readDict(storageKey);
+        if (data.size() == 0) { return 0; }
 
         var now = currentSessionMoment();
         var info = Gregorian.info(now, Time.FORMAT_SHORT);
@@ -365,22 +364,22 @@ class SessionStore {
             }
             for (var j = 0; j < keys.size(); j++) {
                 if (weekKeys.hasKey(keys[j])) {
-                    total += data[keys[j]];
+                    total += asNumber(data[keys[j]]);
                 }
             }
         } else if (period == :month) {
             var prefix = info.year * 100 + info.month;
             for (var j = 0; j < keys.size(); j++) {
                 var k = keys[j];
-                var kPrefix = (k / 100).toNumber();
-                if (kPrefix == prefix) { total += data[k]; }
+                var kPrefix = (asNumber(k) / 100).toNumber();
+                if (kPrefix == prefix) { total += asNumber(data[k]); }
             }
         } else if (period == :year) {
             var yr = info.year;
             for (var j = 0; j < keys.size(); j++) {
                 var k = keys[j];
-                var kYear = (k / 10000).toNumber();
-                if (kYear == yr) { total += data[k]; }
+                var kYear = (asNumber(k) / 10000).toNumber();
+                if (kYear == yr) { total += asNumber(data[k]); }
             }
         }
 
@@ -388,7 +387,7 @@ class SessionStore {
     }
 
     private function pruneOld(data, storageKey) {
-        if (data == null) { return; }
+        if (!(data instanceof Lang.Dictionary)) { return; }
 
         var now = currentSessionMoment();
         var cutoff = new Time.Moment(now.value() - 400 * 86400);
@@ -398,7 +397,7 @@ class SessionStore {
         var keys = data.keys();
         var changed = false;
         for (var i = 0; i < keys.size(); i++) {
-            if (keys[i] < cutKey) {
+            if (asNumber(keys[i]) < cutKey) {
                 data.remove(keys[i]);
                 changed = true;
             }
@@ -434,35 +433,40 @@ class SessionStore {
         return false;
     }
 
+    // Real devices can retain stale/corrupt object-store values across installs.
+    // Always coerce a stored aggregate to a usable Dictionary / Number instead of
+    // calling .hasKey() or doing arithmetic on whatever happens to be there.
+    private function readDict(storageKey) as Lang.Dictionary {
+        var v = Storage.getValue(storageKey);
+        if (v instanceof Lang.Dictionary) { return v; }
+        return {};
+    }
+
+    private function asNumber(v) as Lang.Number {
+        if (v instanceof Lang.Number || v instanceof Lang.Long ||
+            v instanceof Lang.Float || v instanceof Lang.Double) {
+            return v.toNumber();
+        }
+        return 0;
+    }
+
     private function applySessionToAggregates(dayKey, durationMinutes, tag) as Void {
-        var mins = Storage.getValue("mins");
-        if (mins == null) { mins = {}; }
-        var existing = 0;
-        if (mins.hasKey(dayKey)) { existing = mins[dayKey]; }
-        mins.put(dayKey, existing + durationMinutes);
+        var mins = readDict("mins");
+        mins.put(dayKey, asNumber(mins[dayKey]) + durationMinutes);
         Storage.setValue("mins", mins);
 
-        var boxes = Storage.getValue("boxes");
-        if (boxes == null) { boxes = {}; }
-        var existingB = 0;
-        if (boxes.hasKey(dayKey)) { existingB = boxes[dayKey]; }
-        boxes.put(dayKey, existingB + 1);
+        var boxes = readDict("boxes");
+        boxes.put(dayKey, asNumber(boxes[dayKey]) + 1);
         Storage.setValue("boxes", boxes);
 
         var tagMinsKey = "mins_" + tag;
-        var tagMins = Storage.getValue(tagMinsKey);
-        if (tagMins == null) { tagMins = {}; }
-        var existingT = 0;
-        if (tagMins.hasKey(dayKey)) { existingT = tagMins[dayKey]; }
-        tagMins.put(dayKey, existingT + durationMinutes);
+        var tagMins = readDict(tagMinsKey);
+        tagMins.put(dayKey, asNumber(tagMins[dayKey]) + durationMinutes);
         Storage.setValue(tagMinsKey, tagMins);
 
         var tagBoxesKey = "boxes_" + tag;
-        var tagBoxes = Storage.getValue(tagBoxesKey);
-        if (tagBoxes == null) { tagBoxes = {}; }
-        var existingTB = 0;
-        if (tagBoxes.hasKey(dayKey)) { existingTB = tagBoxes[dayKey]; }
-        tagBoxes.put(dayKey, existingTB + 1);
+        var tagBoxes = readDict(tagBoxesKey);
+        tagBoxes.put(dayKey, asNumber(tagBoxes[dayKey]) + 1);
         Storage.setValue(tagBoxesKey, tagBoxes);
 
         ensureKnownTag(tag);
@@ -538,8 +542,7 @@ class SessionStore {
         }
     }
 
-    private function appendSessionToLedger(durationMinutes, dayKey, tag) as Lang.String {
-        var localId = nextLocalSessionId();
+    private function appendSessionToLedger(localId, durationMinutes, dayKey, tag) as Void {
         var sessions = getSessionLedger();
         sessions.add({
             "local_id" => localId,
@@ -549,7 +552,6 @@ class SessionStore {
             "tag" => tag
         });
         saveSessionLedger(sessions);
-        return localId;
     }
 
     private function removeSessionFromLedgerByLocalId(localId) as Void {
