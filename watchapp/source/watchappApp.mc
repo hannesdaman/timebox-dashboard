@@ -1,11 +1,17 @@
 import Toybox.Application;
+import Toybox.Background;
 import Toybox.Lang;
 import Toybox.WatchUi;
 import Toybox.Communications;
 import Toybox.System;
+import Toybox.Time;
 import Toybox.Application.Storage;
-import Toybox.PersistedContent;
 
+// The app class runs in the background service context too (annotated
+// :background so getServiceDelegate can be reached), so onStart/onStop must
+// only touch background-safe modules; foreground-only startup work lives in
+// getInitialView, which the background never calls.
+(:background)
 class watchappApp extends Application.AppBase {
 
     var SUPABASE_URL = "https://gujufwafdradmmehtafx.supabase.co/rest/v1/sessions";
@@ -19,16 +25,44 @@ class watchappApp extends Application.AppBase {
     }
 
     function onStart(state as Dictionary?) as Void {
-        syncPendingSessions();
     }
 
+    // Also called when the background service exits. If a running countdown
+    // was saved, schedule a background wake at its deadline so the app can
+    // pop up like the native Timer app; skipped once the deadline has passed
+    // to avoid an immediate-retrigger loop.
     function onStop(state as Dictionary?) as Void {
+        var wasRunning = Storage.getValue("timer_was_running");
+        if (wasRunning != true) { return; }
+
+        var savedAt = Storage.getValue("timer_saved_at");
+        var remaining = Storage.getValue("timer_remaining");
+        var savedAtOk = (savedAt instanceof Lang.Number) || (savedAt instanceof Lang.Long);
+        var remainingOk = (remaining instanceof Lang.Number) || (remaining instanceof Lang.Long);
+        if (!savedAtOk || !remainingOk) { return; }
+
+        var deadline = savedAt.toNumber() + remaining.toNumber();
+        if (deadline <= Time.now().value()) { return; }
+
+        try {
+            Background.registerForTemporalEvent(new Time.Moment(deadline));
+        } catch (e instanceof Lang.Exception) {
+            // Better to miss one wake than to crash on exit; the session is
+            // still completed and dated correctly on next manual launch.
+        }
+    }
+
+    function getServiceDelegate() as [System.ServiceDelegate] {
+        return [new TimeBoxBackgroundService()];
     }
 
     function onSettingsChanged() as Void {
     }
 
     function getInitialView() as [Views] or [Views, InputDelegates] {
+        Background.deleteTemporalEvent();
+        syncPendingSessions();
+
         if (isFirstLaunch()) {
             return [ new WelcomeView(), new WelcomeDelegate() ];
         }
@@ -57,11 +91,7 @@ class watchappApp extends Application.AppBase {
             }
         }
 
-        return [ new Rez.Menus.MainMenu(), new watchappMenuDelegate() ];
-    }
-
-    function syncSession(durationMinutes, dateKey, tag) {
-        syncPendingSessions();
+        return [ new MainMenu(), new MainMenuDelegate() ];
     }
 
     function syncPendingSessions() as Void {
@@ -78,6 +108,14 @@ class watchappApp extends Application.AppBase {
             "session_date" => formatDateKey(nextPending["date_key"]),
             "tag" => nextPending["tag"]
         };
+
+        // Sessions completed while the app was closed carry their real end
+        // time; sending it as created_at keeps the dashboard and the stats
+        // reconcile on the day the session actually happened.
+        var endEpoch = nextPending["end_epoch"];
+        if ((endEpoch instanceof Lang.Number) || (endEpoch instanceof Lang.Long)) {
+            payload.put("created_at", isoUtcTimestamp(endEpoch.toNumber()));
+        }
 
         var options = {
             :method => Communications.HTTP_REQUEST_METHOD_POST,
@@ -140,8 +178,12 @@ class watchappApp extends Application.AppBase {
         _refreshStatsQueued = false;
         _refreshingStats = true;
 
-        var cutoff = formatDateKey(store.syncCutoffKey());
-        var url = SUPABASE_URL + "?select=id,session_date,created_at,duration,tag&session_date=gte." + cutoff + "&order=session_date.asc,id.asc&limit=5000";
+        // 30-day window with a hard row cap: the device rejects larger
+        // responses with -402 (Batch 3's hardware failure mode; ~21kB still
+        // failed on fenix7x, ~12kB fits). Older stats stay locally
+        // maintained; the cloud only corrects this recent window.
+        var windowStart = formatDateKey(store.reconcileWindowStartKey());
+        var url = SUPABASE_URL + "?select=id,session_date,created_at,duration,tag&session_date=gte." + windowStart + "&order=session_date.desc,id.desc&limit=100";
         var options = {
             :method => Communications.HTTP_REQUEST_METHOD_GET,
             :headers => {
@@ -154,21 +196,29 @@ class watchappApp extends Application.AppBase {
         Communications.makeWebRequest(url, null, options, method(:onStatsRefreshResponse));
     }
 
-    function onPendingSyncResponse(responseCode as Lang.Number, data as Lang.Dictionary or Lang.String or PersistedContent.Iterator or Null) as Void {
+    function onPendingSyncResponse(responseCode as Lang.Number, data as Lang.Dictionary or Lang.String or Null) as Void {
         var completedLocalId = _syncingLocalId;
         _syncingLocalId = null;
 
         if (responseCode == 201 || responseCode == 200) {
             var store = new SessionStore();
+            var remoteId = null;
             var rows = responseRows(data);
             if (rows.size() > 0) {
                 var firstRow = rows[0];
                 if (firstRow instanceof Lang.Dictionary && firstRow.hasKey("id")) {
-                    store.setLastRemoteIdForLocalId(completedLocalId, firstRow["id"]);
+                    remoteId = firstRow["id"];
+                    store.setLastRemoteIdForLocalId(completedLocalId, remoteId);
                 }
             }
 
-            store.removePendingSessionByLocalId(completedLocalId);
+            var wasStillQueued = store.removePendingSessionByLocalId(completedLocalId);
+            if (!wasStillQueued && remoteId != null) {
+                // The session was undone while its upload was in flight; the
+                // row exists remotely but nowhere locally anymore.
+                deleteSessionById(remoteId);
+            }
+
             System.println("Sync OK");
             if (store.peekPendingSession() != null) {
                 syncPendingSessions();
@@ -196,13 +246,26 @@ class watchappApp extends Application.AppBase {
         }
     }
 
-    function onStatsRefreshResponse(responseCode as Lang.Number, data as Lang.Dictionary or Lang.String or PersistedContent.Iterator or Null) as Void {
+    function onStatsRefreshResponse(responseCode as Lang.Number, data as Lang.Dictionary or Lang.String or Null) as Void {
         _refreshingStats = false;
 
         if (responseCode == 200) {
             if (canInterpretRows(data)) {
+                var rows = responseRows(data);
+                if (rows.size() >= 100) {
+                    System.println("Stats refresh truncated at row cap");
+                }
+
+                // The bounded query returns newest-first; the ledger keeps
+                // its most-recent-last convention, so restore ascending order.
+                var ordered = [];
+                for (var i = rows.size() - 1; i >= 0; i--) {
+                    ordered.add(rows[i]);
+                }
+                rows = null;
+
                 var store = new SessionStore();
-                store.reconcileRecentWithRemote(responseRows(data));
+                store.reconcileRecentWithRemote(ordered);
                 WatchUi.requestUpdate();
                 System.println("Stats refresh OK");
             } else {

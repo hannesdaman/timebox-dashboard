@@ -28,7 +28,7 @@ class TimerDelegate extends WatchUi.BehaviorDelegate {
     function onBack() {
         if (_view.shouldBackToMenu()) {
             _view.discardSavedTimer();
-            WatchUi.switchToView(new Rez.Menus.MainMenu(), new watchappMenuDelegate(), WatchUi.SLIDE_DOWN);
+            MainMenu.switchTo(WatchUi.SLIDE_DOWN);
         } else {
             WatchUi.popView(WatchUi.SLIDE_DOWN);
         }

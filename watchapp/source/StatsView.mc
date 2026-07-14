@@ -37,22 +37,26 @@ class StatsView extends WatchUi.View {
         var today = _store.todayKey();
         _store.clearToday();
         getApp().deleteSessionsForDate(today);
-        _message = "Today reset!";
-        WatchUi.requestUpdate();
-        _messageTimer.start(method(:onMessageTimeout), 2000, false);
+        showMessage("Today reset!");
     }
 
     function undoLast() {
         var info = _store.undoLastRecord();
         if (info == null) {
-            _message = "Nothing to undo";
+            showMessage("Nothing to undo");
         } else {
-            _message = "-" + info["duration"] + " min removed";
             if (info["remote_id"] != null) {
                 getApp().deleteSessionById(info["remote_id"]);
             }
+            showMessage("-" + info["duration"] + " min removed");
         }
+    }
+
+    private function showMessage(message) {
+        _message = message;
         WatchUi.requestUpdate();
+        // restarting an already-running timer is an error; stop first
+        _messageTimer.stop();
         _messageTimer.start(method(:onMessageTimeout), 2000, false);
     }
 

@@ -6,875 +6,1663 @@
 <title>TimeBox Dashboard</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,500;0,9..40,700;1,9..40,300&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,300&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
+/* ---------- Design tokens ---------- */
 :root {
     --bg: #0a0a0f;
     --surface: #13131a;
     --surface-2: #1a1a24;
-    --border: #2a2a3a;
+    --surface-3: #202030;
+    --border: #262636;
+    --border-strong: #34344a;
     --text: #e8e8f0;
-    --text-dim: #8888a0;
+    --text-2: #b6b6c8;
+    --text-dim: #9494ac;
+    --text-faint: #6a6a80;
     --accent: #6c5ce7;
-    --accent-glow: rgba(108, 92, 231, 0.15);
-    --green: #00b894;
-    --green-dim: rgba(0, 184, 148, 0.12);
-    --red: #e17055;
-    --orange: #fdcb6e;
+    --accent-soft: rgba(108, 92, 231, 0.14);
+    --pos: #00b894;
+    --pos-soft: rgba(0, 184, 148, 0.12);
+    --neg: #e17055;
+    --neg-soft: rgba(225, 112, 85, 0.12);
+    --warn: #fdcb6e;
+    --warn-soft: rgba(253, 203, 110, 0.12);
     --font: 'DM Sans', system-ui, sans-serif;
     --mono: 'JetBrains Mono', monospace;
+    --r-lg: 16px;
+    --r-md: 12px;
+    --r-sm: 8px;
+    --gap: 20px;
+    --pad-card: 22px;
+    --maxw: 1280px;
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { background: var(--bg); color: var(--text); font-family: var(--font); min-height: 100vh; overflow-x: hidden; }
-.noise { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E"); pointer-events: none; z-index: 999; }
-.container { max-width: 1200px; margin: 0 auto; padding: 40px 24px; }
+html { scrollbar-color: var(--border-strong) transparent; }
+body { background: var(--bg); color: var(--text); font-family: var(--font); min-height: 100vh; font-size: 14px; line-height: 1.45; }
+.container { max-width: var(--maxw); margin: 0 auto; padding: 28px 24px 64px; }
+button { font-family: var(--font); }
+.mono, .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
 
-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px; flex-wrap: wrap; gap: 24px; }
-.logo { display: flex; align-items: center; gap: 14px; }
-.header-actions { display: flex; align-items: center; gap: 10px; }
-.logo-icon { width: 44px; height: 44px; background: linear-gradient(135deg, var(--accent), #a29bfe); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 700; color: white; box-shadow: 0 4px 20px var(--accent-glow); }
-h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
+/* ---------- Header ---------- */
+header { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+.logo { display: flex; align-items: center; gap: 13px; }
+.logo-icon { width: 42px; height: 42px; background: linear-gradient(135deg, var(--accent), #a29bfe); border-radius: 11px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 700; color: white; }
+h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.4px; line-height: 1.15; }
 h1 span { color: var(--text-dim); font-weight: 300; }
-.status-text { font-size: 11px; color: var(--text-dim); margin-top: 8px; }
-.status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
-.status-dot.online { background: var(--green); }
-.status-dot.offline { background: var(--red); }
+.sync-line { font-size: 12px; color: var(--text-dim); margin-top: 2px; display: flex; align-items: center; gap: 6px; }
+.sync-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-faint); }
+.sync-dot.ok { background: var(--pos); }
+.sync-dot.err { background: var(--neg); }
+.header-actions { display: flex; align-items: center; gap: 10px; }
 
-/* Filter strip */
-.filter-strip { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
-.tab-shell { display: inline-flex; align-items: center; gap: 8px; padding: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 22px; flex-wrap: wrap; }
-.tab-bar { display: flex; gap: 8px; flex-wrap: wrap; }
-.tab { background: transparent; border: 1px solid transparent; border-radius: 18px; padding: 8px 18px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; color: var(--text-dim); font-family: var(--font); }
-.tab:hover { border-color: var(--accent); color: var(--text); }
-.tab.active { color: white; border-color: transparent; background: var(--accent); box-shadow: 0 2px 12px var(--accent-glow); }
-.filter-note { font-size: 12px; color: var(--text-dim); display: flex; align-items: center; gap: 8px; }
-.filter-note strong { color: var(--text); font-weight: 600; }
-.filter-note-badge { padding: 5px 10px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); font-family: var(--mono); font-size: 11px; color: var(--text); }
+/* ---------- Buttons / chips ---------- */
+.btn { background: var(--accent); color: white; border: none; border-radius: 10px; padding: 10px 22px; font-size: 13.5px; font-weight: 600; cursor: pointer; transition: background 0.15s, transform 0.1s; white-space: nowrap; }
+.btn:hover { background: #7d6ff0; }
+.btn:active { transform: translateY(1px); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-ghost { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 9px 16px; color: var(--text-2); font-family: var(--mono); font-size: 12.5px; cursor: pointer; transition: border-color 0.15s, color 0.15s, background 0.15s; }
+.btn-ghost:hover { border-color: var(--accent); color: var(--text); }
+.btn-danger { background: transparent; border: 1px solid rgba(225,112,85,0.35); color: var(--neg); padding: 6px 13px; font-size: 12px; border-radius: 8px; cursor: pointer; }
+.btn-danger:hover { background: var(--neg); color: white; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 600; border: 1px solid var(--border); background: var(--surface-2); color: var(--text-2); }
+.chip.pos { color: var(--pos); border-color: rgba(0,184,148,0.3); background: var(--pos-soft); }
+.chip.neg { color: var(--neg); border-color: rgba(225,112,85,0.3); background: var(--neg-soft); }
+.chip.warn { color: var(--warn); border-color: rgba(253,203,110,0.3); background: var(--warn-soft); }
+.chip.neutral { color: var(--text-dim); }
 
-/* Stats cards */
-.stats-row { display: flex; gap: 16px; margin-bottom: 32px; flex-wrap: wrap; }
-.stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 22px 24px; flex: 1; min-width: 140px; transition: border-color 0.2s; }
-.stat-card:hover { border-color: #3a3a4e; }
-.stat-value { font-family: var(--mono); font-size: 28px; font-weight: 600; color: var(--green); }
-.stat-value.accent { color: var(--accent); }
-.stat-value.orange { color: var(--orange); }
-.stat-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1.5px; margin-top: 6px; }
+/* ---------- Filter strip ---------- */
+.filter-strip { display: flex; justify-content: space-between; align-items: center; gap: 14px; margin-bottom: var(--gap); flex-wrap: wrap; }
+.tab-bar { display: inline-flex; align-items: center; gap: 6px; padding: 5px; background: var(--surface); border: 1px solid var(--border); border-radius: 20px; flex-wrap: wrap; }
+.tab { background: transparent; border: 1px solid transparent; border-radius: 16px; padding: 7px 16px; font-size: 13px; font-weight: 600; cursor: pointer; transition: color 0.15s, background 0.15s; color: var(--text-dim); }
+.tab:hover { color: var(--text); }
+.tab.active { color: white; background: var(--accent); }
+.filter-note { font-size: 12px; color: var(--text-dim); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.filter-note strong { color: var(--text-2); font-weight: 600; }
+.cutoff-badge { padding: 4px 10px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); font-family: var(--mono); font-size: 11px; color: var(--text-2); white-space: nowrap; }
 
-/* Goal section */
-.goal-section { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 28px 32px; margin-bottom: 32px; }
-.goal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
-.goal-header h3 { font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-dim); }
+/* ---------- Cards & layout ---------- */
+.grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: var(--gap); margin-bottom: var(--gap); }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: var(--pad-card); min-width: 0; }
+.card h3 { font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.4px; color: var(--text-dim); margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.card h3 .h-extra { text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 12px; color: var(--text-faint); }
+.span-12 { grid-column: span 12; }
+.span-8 { grid-column: span 8; }
+.span-7 { grid-column: span 7; }
+.span-6 { grid-column: span 6; }
+.span-5 { grid-column: span 5; }
+.span-4 { grid-column: span 4; }
+.span-3 { grid-column: span 3; }
+
+/* ---------- Hero ---------- */
+.hero-value { font-family: var(--mono); font-size: 34px; font-weight: 600; line-height: 1.1; letter-spacing: -0.5px; }
+.hero-value .unit { font-size: 20px; color: var(--text-dim); font-weight: 500; }
+.hero-label { font-size: 11.5px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1.4px; margin-bottom: 10px; }
+.hero-sub { margin-top: 10px; font-size: 12.5px; color: var(--text-dim); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.week-spark { display: flex; align-items: flex-end; gap: 4px; height: 34px; margin-top: 12px; }
+.week-spark .sbar { flex: 1; min-height: 3px; border-radius: 3px 3px 0 0; background: var(--accent-soft); position: relative; }
+.week-spark .sbar .fill { position: absolute; bottom: 0; left: 0; right: 0; border-radius: 3px 3px 0 0; background: var(--accent); }
+.week-spark .sbar.today .fill { background: var(--pos); }
+.spark-labels { display: flex; gap: 4px; margin-top: 4px; }
+.spark-labels span { flex: 1; text-align: center; font-size: 9.5px; color: var(--text-faint); font-family: var(--mono); }
+.stat-strip { display: flex; flex-wrap: wrap; gap: 10px 26px; padding: 14px 20px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); margin-bottom: var(--gap); }
+.stat-strip .s-item { display: flex; align-items: baseline; gap: 7px; }
+.stat-strip .s-val { font-family: var(--mono); font-size: 15px; font-weight: 600; color: var(--text); }
+.stat-strip .s-lab { font-size: 11.5px; color: var(--text-dim); }
+
+/* ---------- Goal module ---------- */
+.goal-now { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+.goal-now .g-big { font-family: var(--mono); font-size: 26px; font-weight: 600; }
+.goal-now .g-of { color: var(--text-dim); font-size: 14px; }
+.goal-track { position: relative; height: 30px; background: var(--surface-2); border-radius: 9px; overflow: visible; margin: 6px 0 8px; }
+.goal-fill { position: absolute; top: 0; left: 0; bottom: 0; border-radius: 9px; background: linear-gradient(90deg, var(--accent), var(--pos)); transition: width 0.5s ease; }
+.goal-fill.over { background: linear-gradient(90deg, var(--pos), #55efc4); }
+.pace-marker { position: absolute; top: -5px; bottom: -5px; width: 2px; background: var(--warn); border-radius: 2px; }
+.pace-marker::after { content: 'pace'; position: absolute; top: -16px; left: 50%; transform: translateX(-50%); font-size: 9.5px; color: var(--warn); font-family: var(--mono); letter-spacing: 0.5px; }
+.goal-scale { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-faint); font-family: var(--mono); margin-bottom: 14px; }
+.goal-facts { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 12.5px; color: var(--text-dim); margin-bottom: 6px; }
+.goal-facts b { color: var(--text); font-weight: 600; font-family: var(--mono); }
 .goal-edit { display: flex; align-items: center; gap: 8px; }
-.goal-edit input { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; color: var(--text); font-family: var(--mono); font-size: 13px; width: 54px; text-align: center; outline: none; transition: all 0.2s; }
-.goal-edit input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+.goal-edit input { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 5px 8px; color: var(--text); font-family: var(--mono); font-size: 13px; width: 52px; text-align: center; outline: none; }
+.goal-edit input:focus { border-color: var(--accent); }
 .goal-edit label { font-size: 12px; color: var(--text-dim); }
-.goal-weeks { display: flex; flex-direction: column; gap: 14px; }
-.goal-week { display: flex; align-items: center; gap: 16px; }
-.goal-week-label { font-size: 12px; color: var(--text-dim); width: 130px; flex-shrink: 0; white-space: nowrap; }
-.goal-week.current .goal-week-label { color: var(--text); font-weight: 600; }
-.goal-bar-track { flex: 1; background: var(--surface-2); border-radius: 10px; height: 28px; position: relative; }
-.goal-week.past .goal-bar-track { height: 22px; opacity: 0.7; }
-.goal-bar-fill { height: 100%; border-radius: 10px; transition: width 0.6s ease; background: linear-gradient(90deg, var(--accent), var(--green)); position: absolute; top: 0; left: 0; display: flex; align-items: center; justify-content: flex-end; }
-.goal-bar-fill.over { background: linear-gradient(90deg, var(--green), #55efc4); box-shadow: 0 0 20px rgba(0, 184, 148, 0.2); }
-.goal-pct { padding-right: 10px; font-family: var(--mono); font-size: 11px; font-weight: 600; color: white; text-shadow: 0 1px 3px rgba(0,0,0,0.5); white-space: nowrap; }
-.goal-pct.outside { position: absolute; left: calc(var(--fill-w, 0%) + 8px); top: 50%; transform: translateY(-50%); color: var(--text-dim); text-shadow: none; font-family: var(--mono); font-size: 11px; font-weight: 600; padding: 0; }
-.goal-week-hrs { font-family: var(--mono); font-size: 12px; color: var(--text-dim); width: 70px; text-align: right; flex-shrink: 0; }
-.goal-week.current .goal-week-hrs { color: var(--green); font-weight: 600; }
+.goal-history { margin-top: 18px; display: flex; flex-direction: column; gap: 9px; }
+.gh-row { display: flex; align-items: center; gap: 12px; }
+.gh-label { font-size: 12px; color: var(--text-dim); width: 108px; flex-shrink: 0; white-space: nowrap; }
+.gh-track { flex: 1; background: var(--surface-2); border-radius: 7px; height: 16px; position: relative; }
+.gh-fill { height: 100%; border-radius: 7px; background: var(--accent); opacity: 0.85; }
+.gh-fill.hit { background: var(--pos); }
+.gh-val { font-family: var(--mono); font-size: 11.5px; color: var(--text-dim); width: 108px; text-align: right; flex-shrink: 0; }
+.gh-goalmark { position: absolute; top: -3px; bottom: -3px; width: 1.5px; background: var(--text-faint); opacity: 0.7; }
 
-/* Records */
-.records-row { display: flex; gap: 16px; margin-bottom: 32px; flex-wrap: wrap; }
-.record-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 22px 24px; flex: 1; min-width: 180px; text-align: center; transition: border-color 0.2s; }
-.record-card:hover { border-color: #3a3a4e; }
-.record-value { font-family: var(--mono); font-size: 24px; font-weight: 600; color: var(--orange); }
-.record-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1.5px; margin-top: 6px; }
-.record-detail { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+/* ---------- Charts ---------- */
+.chart-controls { display: inline-flex; gap: 4px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 9px; padding: 3px; }
+.chart-controls button { background: transparent; border: none; color: var(--text-dim); font-size: 11.5px; font-family: var(--mono); font-weight: 500; padding: 5px 11px; border-radius: 6px; cursor: pointer; }
+.chart-controls button.active { background: var(--accent); color: white; }
+.chart-box { position: relative; height: 300px; }
+.chart-box.short { height: 240px; }
+.chart-foot { margin-top: 10px; font-size: 11.5px; color: var(--text-faint); }
 
-/* Heatmap */
-.heatmap-section { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 24px; margin-bottom: 32px; }
-.heatmap-section h3 { font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-dim); margin-bottom: 16px; }
-.heatmap-body { display: flex; align-items: flex-start; gap: 8px; }
-.heatmap-axis { display: flex; flex-direction: column; gap: 10px; flex-shrink: 0; }
-.heatmap-week-axis-label { font-size: 10px; line-height: 12px; color: var(--text-dim); font-family: var(--mono); height: 12px; padding-right: 6px; }
-.heatmap-scroll { flex: 1; min-width: 0; overflow-x: auto; padding-bottom: 8px; }
-.heatmap-scroll-inner { min-width: max-content; display: flex; flex-direction: column; gap: 10px; }
-.heatmap-week-labels { display: flex; gap: 3px; }
-.heatmap-week-label { width: 14px; text-align: center; font-size: 9px; line-height: 12px; color: var(--text-dim); font-family: var(--mono); }
-.heatmap-grid { display: flex; gap: 3px; }
-.heatmap-col { display: flex; flex-direction: column; gap: 3px; }
-.heatmap-cell { width: 14px; height: 14px; border-radius: 3px; background: var(--surface-2); }
-.heatmap-cell.l1 { background: rgba(108, 92, 231, 0.25); }
-.heatmap-cell.l2 { background: rgba(108, 92, 231, 0.45); }
-.heatmap-cell.l3 { background: rgba(108, 92, 231, 0.7); }
-.heatmap-cell.l4 { background: rgba(108, 92, 231, 1); }
-.heatmap-legend { display: flex; align-items: center; gap: 6px; justify-content: flex-start; }
-.heatmap-legend span { font-size: 11px; color: var(--text-dim); }
-.heatmap-day-labels { display: flex; flex-direction: column; gap: 3px; margin-right: 6px; }
-.heatmap-day-labels span { font-size: 10px; color: var(--text-dim); height: 14px; line-height: 14px; }
+/* ---------- Heatmap ---------- */
+.hm-body { display: flex; align-items: flex-start; gap: 8px; }
+.hm-day-axis { display: flex; flex-direction: column; gap: 3px; margin-top: 18px; flex-shrink: 0; }
+.hm-day-axis span { font-size: 10px; color: var(--text-dim); height: 13px; line-height: 13px; font-family: var(--mono); }
+.hm-scroll { flex: 1; min-width: 0; overflow-x: auto; padding-bottom: 6px; }
+.hm-inner { min-width: max-content; }
+.hm-months { display: flex; height: 15px; margin-bottom: 3px; position: relative; }
+.hm-month-label { position: absolute; font-size: 10px; color: var(--text-dim); font-family: var(--mono); }
+.hm-grid { display: flex; gap: 3px; }
+.hm-col { display: flex; flex-direction: column; gap: 3px; }
+.hm-cell { width: 13px; height: 13px; border-radius: 3px; background: var(--surface-2); border: none; padding: 0; cursor: pointer; }
+.hm-cell.l1 { background: rgba(108, 92, 231, 0.25); }
+.hm-cell.l2 { background: rgba(108, 92, 231, 0.45); }
+.hm-cell.l3 { background: rgba(108, 92, 231, 0.7); }
+.hm-cell.l4 { background: rgba(108, 92, 231, 1); }
+.hm-cell.future { background: transparent; border: 1px dashed var(--border); cursor: default; }
+.hm-cell.today { box-shadow: 0 0 0 1.5px var(--pos); }
+.hm-cell.selected { box-shadow: 0 0 0 1.5px var(--warn); }
+.hm-legend { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 11px; color: var(--text-dim); flex-wrap: wrap; }
+.hm-legend .hm-cell { cursor: default; }
 
-/* Log form */
-.input-section { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 28px 32px; margin-bottom: 32px; }
-.input-section h2 { font-weight: 500; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; font-size: 12px; margin-bottom: 24px; }
-.input-row { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; }
-.input-group { display: flex; flex-direction: column; gap: 8px; }
-.input-group label { font-size: 12px; color: var(--text-dim); font-weight: 500; letter-spacing: 0.5px; }
-.input-group input, .input-group select { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 11px 16px; color: var(--text); font-family: var(--mono); font-size: 14px; outline: none; transition: all 0.2s; -webkit-appearance: none; appearance: none; }
-.input-group input:hover, .input-group select:hover { border-color: #3a3a4e; }
-.input-group input:focus, .input-group select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
-/* Custom select wrapper */
+/* ---------- Day panel ---------- */
+.day-panel-date { font-size: 15px; font-weight: 700; margin-bottom: 2px; }
+.day-panel-total { font-family: var(--mono); font-size: 24px; font-weight: 600; color: var(--pos); margin: 6px 0 2px; }
+.day-panel-sub { font-size: 12px; color: var(--text-dim); margin-bottom: 14px; }
+.day-cat { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.day-cat .dc-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.day-cat .dc-name { font-size: 12.5px; width: 92px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.day-cat .dc-track { flex: 1; height: 10px; background: var(--surface-2); border-radius: 5px; }
+.day-cat .dc-fill { height: 100%; border-radius: 5px; }
+.day-cat .dc-val { font-family: var(--mono); font-size: 11.5px; color: var(--text-dim); width: 58px; text-align: right; flex-shrink: 0; }
+.day-empty { color: var(--text-faint); font-size: 12.5px; padding: 16px 0; }
+
+/* ---------- Category / bar lists ---------- */
+.cat-row { display: flex; align-items: center; gap: 12px; margin-bottom: 11px; }
+.cat-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.cat-name { font-size: 13px; font-weight: 600; width: 104px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cat-track { flex: 1; height: 14px; background: var(--surface-2); border-radius: 7px; min-width: 40px; }
+.cat-fill { height: 100%; border-radius: 7px; }
+.cat-val { font-family: var(--mono); font-size: 12px; color: var(--text-2); width: 64px; text-align: right; flex-shrink: 0; }
+.cat-share { font-family: var(--mono); font-size: 11.5px; color: var(--text-faint); width: 40px; text-align: right; flex-shrink: 0; }
+.cat-delta { font-family: var(--mono); font-size: 11px; width: 64px; text-align: right; flex-shrink: 0; }
+.alloc-bar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; margin: 4px 0 16px; background: var(--surface-2); }
+.alloc-bar div { height: 100%; }
+.mini-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.mini-table td { padding: 5px 0; color: var(--text-dim); border-bottom: 1px solid var(--border); }
+.mini-table td.v { font-family: var(--mono); color: var(--text-2); text-align: right; }
+.mini-table tr:last-child td { border-bottom: none; }
+
+/* ---------- Distribution bars ---------- */
+.dist-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.dist-label { font-size: 11.5px; color: var(--text-dim); width: 74px; flex-shrink: 0; font-family: var(--mono); }
+.dist-track { flex: 1; height: 12px; background: var(--surface-2); border-radius: 6px; }
+.dist-fill { height: 100%; border-radius: 6px; background: var(--accent); }
+.dist-val { font-family: var(--mono); font-size: 11px; color: var(--text-faint); width: 76px; text-align: right; flex-shrink: 0; white-space: nowrap; }
+.focus-line { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 12.5px; color: var(--text-dim); }
+.focus-line b { color: var(--text); font-family: var(--mono); }
+
+/* ---------- Records ---------- */
+.rec-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.rec-item { padding: 12px 14px; background: var(--surface-2); border-radius: var(--r-md); }
+.rec-val { font-family: var(--mono); font-size: 19px; font-weight: 600; color: var(--warn); }
+.rec-lab { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1.1px; margin-top: 3px; }
+.rec-det { font-size: 11.5px; color: var(--text-faint); margin-top: 3px; }
+.milestones { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 12.5px; color: var(--text-dim); display: flex; flex-direction: column; gap: 6px; }
+.milestones b { color: var(--text-2); font-family: var(--mono); }
+
+/* ---------- Log form ---------- */
+.input-row { display: flex; gap: 14px; align-items: flex-end; flex-wrap: wrap; }
+.input-group { display: flex; flex-direction: column; gap: 7px; }
+.input-group label { font-size: 12px; color: var(--text-dim); font-weight: 500; }
+.input-group input, .input-group select { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; color: var(--text); font-family: var(--mono); font-size: 13.5px; outline: none; -webkit-appearance: none; appearance: none; }
+.input-group input:focus, .input-group select:focus { border-color: var(--accent); }
 .select-wrap { position: relative; }
-.select-wrap select { padding-right: 36px; cursor: pointer; min-width: 150px; }
-.select-wrap::after { content: ''; position: absolute; right: 14px; top: 50%; transform: translateY(-50%); width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 5px solid var(--text-dim); pointer-events: none; }
-.btn { background: var(--accent); color: white; border: none; border-radius: 10px; padding: 11px 28px; font-family: var(--font); font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; letter-spacing: 0.3px; white-space: nowrap; }
-.btn:hover { transform: translateY(-1px); box-shadow: 0 6px 24px var(--accent-glow); background: #7d6ff0; }
-.btn:active { transform: translateY(0); }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
-.btn-danger { background: transparent; border: 1px solid rgba(225, 112, 85, 0.3); color: var(--red); padding: 6px 14px; font-size: 12px; border-radius: 8px; }
-.btn-danger:hover { background: var(--red); color: white; border-color: var(--red); }
-.quick-add { display: flex; gap: 10px; margin-top: 16px; }
-.quick-btn { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 9px 18px; color: var(--text-dim); font-family: var(--mono); font-size: 13px; cursor: pointer; transition: all 0.2s; }
-.quick-btn:hover { border-color: var(--accent); background: var(--accent-glow); color: var(--text); }
+.select-wrap select { padding-right: 34px; cursor: pointer; min-width: 148px; }
+.select-wrap::after { content: ''; position: absolute; right: 13px; top: 50%; transform: translateY(-50%); border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 5px solid var(--text-dim); pointer-events: none; }
+.quick-add { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
 
-/* Charts */
-.charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 32px; }
-.chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 24px; }
-.chart-card.full-width { grid-column: 1 / -1; }
-.chart-card h3 { font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-dim); margin-bottom: 16px; }
-.chart-note { min-height: 18px; margin-top: -8px; margin-bottom: 12px; font-size: 12px; color: var(--text-dim); }
-.chart-note strong { color: var(--text); font-weight: 600; }
-.chart-container { position: relative; height: 280px; }
-.chart-container.tall { height: 340px; }
-
-/* Feed */
-.feed-section { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 24px; }
-.feed-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
-.feed-section h3 { font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-dim); }
-.feed-summary { font-size: 12px; color: var(--text-dim); }
-.feed-list { display: flex; flex-direction: column; gap: 6px; max-height: 400px; overflow-y: auto; }
+/* ---------- Feed ---------- */
+.feed-head-extra { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.feed-list { display: flex; flex-direction: column; gap: 6px; max-height: 460px; overflow-y: auto; }
 .feed-list::-webkit-scrollbar { width: 4px; }
-.feed-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-.feed-item { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; background: var(--surface-2); border: 1px solid transparent; border-radius: 12px; transition: all 0.15s; }
-.feed-item:hover { background: #1e1e2a; border-color: var(--border); }
-.feed-item-left { display: flex; align-items: center; gap: 14px; }
-.feed-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
-.feed-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--accent); }
-.feed-duration { font-family: var(--mono); font-size: 16px; font-weight: 600; }
-.feed-meta { display: flex; align-items: center; gap: 8px; margin-top: 3px; flex-wrap: wrap; }
-.feed-time { font-size: 13px; color: var(--text-dim); }
-.feed-tag { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 12px; letter-spacing: 0.3px; }
-.feed-rollover { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 12px; letter-spacing: 0.2px; background: rgba(253, 203, 110, 0.12); color: var(--orange); border: 1px solid rgba(253, 203, 110, 0.18); }
-.feed-empty { text-align: center; padding: 40px; color: var(--text-dim); font-style: italic; }
+.feed-list::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
+.feed-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; background: var(--surface-2); border: 1px solid transparent; border-radius: var(--r-md); gap: 10px; }
+.feed-item:hover { border-color: var(--border-strong); }
+.feed-left { display: flex; align-items: center; gap: 13px; min-width: 0; }
+.feed-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.feed-duration { font-family: var(--mono); font-size: 15px; font-weight: 600; }
+.feed-meta { display: flex; align-items: center; gap: 8px; margin-top: 2px; flex-wrap: wrap; }
+.feed-time { font-size: 12.5px; color: var(--text-dim); }
+.feed-tag { font-size: 11px; font-weight: 600; padding: 2.5px 9px; border-radius: 11px; }
+.feed-rollover { font-size: 10.5px; font-weight: 600; padding: 2.5px 9px; border-radius: 11px; background: var(--warn-soft); color: var(--warn); border: 1px solid rgba(253,203,110,0.2); }
+.feed-empty { text-align: center; padding: 36px; color: var(--text-faint); font-style: italic; }
+.show-more { margin: 10px auto 2px; display: block; }
 
-@media (max-width: 768px) { .charts-grid { grid-template-columns: 1fr; } .stats-row { gap: 10px; } .stat-card { padding: 14px 16px; } .stat-value { font-size: 22px; } .records-row { gap: 10px; } .filter-strip { align-items: flex-start; } .filter-note { line-height: 1.45; } }
+/* ---------- States ---------- */
+.banner { display: none; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 18px; border-radius: var(--r-md); margin-bottom: var(--gap); font-size: 13px; flex-wrap: wrap; }
+.banner.error { display: flex; background: var(--neg-soft); border: 1px solid rgba(225,112,85,0.35); color: #f0a898; }
+.banner.demo { display: flex; background: var(--warn-soft); border: 1px solid rgba(253,203,110,0.3); color: var(--warn); }
+.skeleton { position: relative; overflow: hidden; background: var(--surface-2); border-radius: 6px; color: transparent !important; }
+.skeleton::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent); animation: shimmer 1.4s infinite; }
+@keyframes shimmer { 100% { transform: translateX(100%); } }
+.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--surface-3); border: 1px solid var(--border-strong); color: var(--text); padding: 11px 22px; border-radius: 10px; font-size: 13px; z-index: 100; opacity: 0; pointer-events: none; transition: opacity 0.25s; }
+.toast.show { opacity: 1; }
+footer { margin-top: 28px; font-size: 11.5px; color: var(--text-faint); line-height: 1.7; }
+
+/* ---------- Responsive ---------- */
+@media (max-width: 1020px) {
+    .span-3, .span-4, .span-5 { grid-column: span 6; }
+    .span-6, .span-7, .span-8 { grid-column: span 12; }
+}
+@media (max-width: 680px) {
+    .container { padding: 18px 14px 48px; }
+    .grid { gap: 12px; margin-bottom: 12px; }
+    :root { --pad-card: 16px; --gap: 12px; }
+    .span-3, .span-4, .span-5 { grid-column: span 12; }
+    .hero-value { font-size: 28px; }
+    .goal-facts { gap: 6px 16px; }
+    .gh-label { width: 84px; font-size: 11px; }
+    .gh-val { width: 84px; font-size: 10.5px; }
+    .cat-name { width: 84px; }
+    .cat-share, .cat-delta { display: none; }
+    .chart-box { height: 240px; }
+    .stat-strip { gap: 8px 18px; padding: 12px 16px; }
+    h1 { font-size: 20px; }
+}
 </style>
 </head>
 <body>
-<div class="noise"></div>
 <div class="container">
     <header>
         <div class="logo">
-            <div class="logo-icon">TB</div>
+            <div class="logo-icon" aria-hidden="true">TB</div>
             <div>
                 <h1>TimeBox <span>Dashboard</span></h1>
-                <div class="status-text" id="statusText"><span class="status-dot"></span>Connecting...</div>
+                <div class="sync-line" id="syncLine"><span class="sync-dot" id="syncDot"></span><span id="syncText">Loading sessions…</span></div>
             </div>
         </div>
         <div class="header-actions">
-            <button class="quick-btn" onclick="exportCsv()">Export CSV</button>
+            <button class="btn-ghost" id="exportBtn" onclick="exportCsv()">Export CSV</button>
         </div>
     </header>
 
+    <div class="banner demo" id="demoBanner" hidden style="display:none">Demo mode — showing generated fixture data. Nothing is read from or written to Supabase.</div>
+    <div class="banner error" id="errorBanner" style="display:none">
+        <span id="errorText">Could not load sessions.</span>
+        <button class="btn-ghost" onclick="refreshAll()">Retry</button>
+    </div>
+
     <div class="filter-strip">
-        <div class="tab-shell">
-            <div class="tab-bar" id="tabBar"></div>
-        </div>
+        <div class="tab-bar" id="tabBar" role="tablist" aria-label="Category filter"></div>
         <div class="filter-note">
-            <span class="filter-note-badge">Day cutoff 02:30 am</span>
-            <span>Sessions logged between <strong>00:00 and 02:30 am</strong> count toward the previous day.</span>
+            <span class="cutoff-badge">Day cutoff 02:30</span>
+            <span>Sessions logged between <strong>00:00–02:30</strong> count toward the previous day.</span>
         </div>
     </div>
 
-    <div class="stats-row">
-        <div class="stat-card"><div class="stat-value" id="totalToday">-</div><div class="stat-label">Today</div></div>
-        <div class="stat-card"><div class="stat-value" id="totalWeek">-</div><div class="stat-label">This Week</div></div>
-        <div class="stat-card"><div class="stat-value accent" id="totalAll">-</div><div class="stat-label">All Time (hrs)</div></div>
-        <div class="stat-card"><div class="stat-value" id="avgPerDay">-</div><div class="stat-label">Avg / Active Day</div></div>
-        <div class="stat-card"><div class="stat-value orange" id="streakCount">-</div><div class="stat-label">Day Streak</div></div>
-    </div>
-
-    <div class="goal-section">
-        <div class="goal-header">
-            <h3>Weekly Goal</h3>
-            <div class="goal-edit" id="goalEditWrap">
-                <input type="number" id="goalHrs" value="0" min="0" max="80" onchange="saveGoal(); renderAll(allSessions)">
-                <label>h</label>
-                <input type="number" id="goalMins" value="0" min="0" max="59" step="5" onchange="saveGoal(); renderAll(allSessions)">
-                <label>m /wk</label>
-            </div>
+    <!-- Executive summary -->
+    <div class="grid" id="heroGrid">
+        <div class="card span-4">
+            <div class="hero-label">Today</div>
+            <div class="hero-value" id="heroToday"><span class="skeleton">0h 00m</span></div>
+            <div class="hero-sub" id="heroTodaySub"></div>
         </div>
-        <div class="goal-weeks" id="goalWeeks"></div>
+        <div class="card span-4">
+            <div class="hero-label">This week</div>
+            <div class="hero-value" id="heroWeek"><span class="skeleton">00.0h</span></div>
+            <div class="hero-sub" id="heroWeekSub"></div>
+            <div class="week-spark" id="weekSpark" aria-hidden="true"></div>
+            <div class="spark-labels"><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span></div>
+        </div>
+        <div class="card span-4">
+            <div class="hero-label">Weekly goal</div>
+            <div class="hero-value" id="heroGoal"><span class="skeleton">00%</span></div>
+            <div class="hero-sub" id="heroGoalSub"></div>
+        </div>
     </div>
 
-    <div class="records-row">
-        <div class="record-card"><div class="record-value" id="bestDay">-</div><div class="record-label">Best Day</div><div class="record-detail" id="bestDayDate">-</div></div>
-        <div class="record-card"><div class="record-value" id="bestWeek">-</div><div class="record-label">Best Week</div><div class="record-detail" id="bestWeekDate">-</div></div>
-        <div class="record-card"><div class="record-value" id="bestStreak">-</div><div class="record-label">Best Streak</div><div class="record-detail">consecutive days</div></div>
-        <div class="record-card"><div class="record-value" id="totalSessions">-</div><div class="record-label">Total Sessions</div><div class="record-detail">all time</div></div>
+    <div class="stat-strip" id="statStrip" aria-label="Summary statistics"></div>
+
+    <!-- Weekly goal & pace -->
+    <div class="grid">
+        <div class="card span-12" id="goalCard">
+            <h3>Weekly goal &amp; pace
+                <span class="goal-edit" id="goalEditWrap">
+                    <input type="number" id="goalHrs" value="0" min="0" max="99" aria-label="Goal hours per week" onchange="onGoalEdited()">
+                    <label for="goalHrs">h</label>
+                    <input type="number" id="goalMins" value="0" min="0" max="59" step="5" aria-label="Goal minutes per week" onchange="onGoalEdited()">
+                    <label for="goalMins">m / week</label>
+                </span>
+                <span class="h-extra" id="goalEditNote" style="display:none">Goal for All = sum of per-project goals</span>
+            </h3>
+            <div id="goalBody"></div>
+            <div class="goal-history" id="goalHistory"></div>
+            <div class="chart-foot" id="goalFoot"></div>
+        </div>
     </div>
 
-    <div class="heatmap-section">
-        <h3 id="heatmapTitle">Activity — Last 16 Weeks</h3>
-        <div class="heatmap-body">
-            <div class="heatmap-axis">
-                <div class="heatmap-week-axis-label">Week</div>
-                <div class="heatmap-day-labels"><span>Mon</span><span></span><span>Wed</span><span></span><span>Fri</span><span></span><span>Sun</span></div>
-            </div>
-            <div class="heatmap-scroll">
-                <div class="heatmap-scroll-inner">
-                    <div class="heatmap-week-labels" id="heatmapWeekLabels"></div>
-                    <div class="heatmap-grid" id="heatmapGrid"></div>
-                    <div class="heatmap-legend"><span>Less</span><div class="heatmap-cell"></div><div class="heatmap-cell l1"></div><div class="heatmap-cell l2"></div><div class="heatmap-cell l3"></div><div class="heatmap-cell l4"></div><span>More</span></div>
+    <!-- Trend -->
+    <div class="grid">
+        <div class="card span-12">
+            <h3>Completed time
+                <span class="chart-controls" id="trendRange" role="group" aria-label="Trend range">
+                    <button data-r="28d" class="active">28 days</button>
+                    <button data-r="8w">8 weeks</button>
+                    <button data-r="26w">26 weeks</button>
+                </span>
+            </h3>
+            <div class="chart-box"><canvas id="trendChart"></canvas></div>
+            <div class="chart-foot" id="trendFoot"></div>
+            <p class="visually-hidden" id="trendSummary"></p>
+        </div>
+    </div>
+
+    <!-- Heatmap + day panel -->
+    <div class="grid">
+        <div class="card span-7">
+            <h3><span id="hmTitle">Activity</span>
+                <span class="chart-controls" id="hmRange" role="group" aria-label="Heatmap range">
+                    <button data-w="16" class="active">16w</button>
+                    <button data-w="26">26w</button>
+                    <button data-w="52">52w</button>
+                </span>
+            </h3>
+            <div class="hm-body">
+                <div class="hm-day-axis" aria-hidden="true"><span>Mon</span><span></span><span>Wed</span><span></span><span>Fri</span><span></span><span>Sun</span></div>
+                <div class="hm-scroll">
+                    <div class="hm-inner">
+                        <div class="hm-months" id="hmMonths"></div>
+                        <div class="hm-grid" id="hmGrid"></div>
+                    </div>
                 </div>
             </div>
+            <div class="hm-legend" id="hmLegend"></div>
+            <p class="visually-hidden" id="hmSummary"></p>
+        </div>
+        <div class="card span-5">
+            <h3>Day detail <span class="h-extra">select a day in the heatmap</span></h3>
+            <div id="dayPanel"><div class="day-empty">Loading…</div></div>
         </div>
     </div>
 
-    <div class="input-section">
-        <h2>Log a Session</h2>
-        <div class="input-row">
-            <div class="input-group"><label>Date</label><input type="date" id="sessionDate"></div>
-            <div class="input-group"><label>Duration (min)</label><input type="number" id="sessionMinutes" min="1" max="300" value="50" style="width:110px"></div>
-            <div class="input-group"><label>Project</label><div class="select-wrap"><select id="sessionTag"></select></div></div>
-            <button class="btn" id="addBtn" onclick="addSession()">Log Session</button>
+    <!-- Categories + sessions -->
+    <div class="grid">
+        <div class="card span-6">
+            <h3>Categories — last 28 days <span class="h-extra" id="catNote"></span></h3>
+            <div class="alloc-bar" id="allocBar" aria-hidden="true"></div>
+            <div id="catList"></div>
+            <p class="visually-hidden" id="catSummary"></p>
         </div>
-        <div class="quick-add">
-            <button class="quick-btn" onclick="quickAdd(25)">+25 min</button>
-            <button class="quick-btn" onclick="quickAdd(50)">+50 min</button>
-            <button class="quick-btn" onclick="quickAdd(90)">+90 min</button>
+        <div class="card span-6">
+            <h3>Sessions — last 28 days <span class="h-extra" id="sessNote"></span></h3>
+            <div id="sessStats"></div>
+            <div id="durHist" style="margin-top:14px"></div>
+            <div class="focus-line" id="focusLine"></div>
         </div>
     </div>
 
-    <div class="charts-grid">
-        <div class="chart-card full-width"><h3 id="weeklyTitle">Weekly Time</h3><div class="chart-note" id="weeklyNote"></div><div class="chart-container tall"><canvas id="weeklyChart"></canvas></div></div>
-        <div class="chart-card"><h3>Daily This Week</h3><div class="chart-note" id="dailyNote"></div><div class="chart-container"><canvas id="dailyChart"></canvas></div></div>
-        <div class="chart-card"><h3>Monthly Totals</h3><div class="chart-note" id="monthlyNote"></div><div class="chart-container"><canvas id="monthlyChart"></canvas></div></div>
-        <div class="chart-card full-width"><h3 id="cumulativeTitle">Cumulative Hours</h3><div class="chart-note" id="cumulativeNote"></div><div class="chart-container tall"><canvas id="cumulativeChart"></canvas></div></div>
+    <!-- Rhythm + consistency + records -->
+    <div class="grid">
+        <div class="card span-4">
+            <h3>Weekday rhythm <span class="h-extra">avg / day, last 8 weeks</span></h3>
+            <div id="weekdayDist"></div>
+        </div>
+        <div class="card span-4">
+            <h3>Time of day <span class="h-extra" id="todNote"></span></h3>
+            <div id="todDist"></div>
+        </div>
+        <div class="card span-4">
+            <h3>Consistency</h3>
+            <div id="consistencyBody"></div>
+        </div>
     </div>
 
-    <div class="feed-section">
-        <div class="feed-header">
-            <h3>Session Feed</h3>
-            <div class="feed-summary" id="feedSummary"></div>
+    <div class="grid">
+        <div class="card span-6">
+            <h3>Records</h3>
+            <div class="rec-grid" id="recGrid"></div>
         </div>
-        <div class="feed-list" id="feedList"><div class="feed-empty">Loading...</div></div>
+        <div class="card span-6">
+            <h3>Milestones</h3>
+            <div class="milestones" id="milestones"></div>
+        </div>
     </div>
+
+    <!-- Cumulative -->
+    <div class="grid">
+        <div class="card span-12">
+            <h3>Cumulative hours <span class="h-extra" id="cumNote"></span></h3>
+            <div class="chart-box short"><canvas id="cumChart"></canvas></div>
+        </div>
+    </div>
+
+    <!-- Log a session -->
+    <div class="grid">
+        <div class="card span-12">
+            <h3>Log a session</h3>
+            <div class="input-row">
+                <div class="input-group"><label for="sessionDate">Date</label><input type="date" id="sessionDate"></div>
+                <div class="input-group"><label for="sessionMinutes">Duration (min)</label><input type="number" id="sessionMinutes" min="1" max="600" value="50" style="width:104px"></div>
+                <div class="input-group"><label for="sessionTag">Project</label><div class="select-wrap"><select id="sessionTag"></select></div></div>
+                <button class="btn" id="addBtn" onclick="addSession()">Log session</button>
+            </div>
+            <div class="quick-add">
+                <button class="btn-ghost" onclick="quickAdd(25)">+25 min</button>
+                <button class="btn-ghost" onclick="quickAdd(50)">+50 min</button>
+                <button class="btn-ghost" onclick="quickAdd(90)">+90 min</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feed -->
+    <div class="grid">
+        <div class="card span-12">
+            <h3>Session feed
+                <span class="feed-head-extra">
+                    <span class="chip warn" id="dayFilterChip" style="display:none"></span>
+                    <span class="h-extra" id="feedSummary"></span>
+                </span>
+            </h3>
+            <div class="feed-list" id="feedList"><div class="feed-empty">Loading…</div></div>
+            <button class="btn-ghost show-more" id="showMoreBtn" style="display:none" onclick="showMoreFeed()">Show older sessions</button>
+        </div>
+    </div>
+
+    <footer id="pageFoot"></footer>
 </div>
 
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script id="tb-analytics">
+/* ============================================================
+   TimeBox canonical analytics layer.
+   Pure functions only — no DOM, no fetch, no Date.now() except
+   through the `now` parameter. Every metric on the page derives
+   from computeAnalytics() so numbers can never disagree.
+   ============================================================ */
+var TB = (function () {
+    var ROLLOVER_MIN = 150; // 02:30 logical-day cutoff
+
+    // ---- dates ----
+    function pad2(n) { return n < 10 ? '0' + n : '' + n; }
+    function fmtDate(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+    function parseDay(s) { return new Date(s + 'T12:00:00'); } // noon anchor: DST-safe day arithmetic
+    function addDays(s, n) { var d = parseDay(s); d.setDate(d.getDate() + n); return fmtDate(d); }
+    function dayDiff(a, b) { return Math.round((parseDay(b) - parseDay(a)) / 86400000); }
+    function logicalToday(now) { return fmtDate(new Date(now.getTime() - ROLLOVER_MIN * 60000)); }
+    function calendarToday(now) { return fmtDate(now); }
+    function weekStart(dayStr) { // Monday of the week containing dayStr
+        var d = parseDay(dayStr);
+        var wd = d.getDay();
+        d.setDate(d.getDate() - wd + (wd === 0 ? -6 : 1));
+        return fmtDate(d);
+    }
+    function isoWeek(dayStr) {
+        var d = parseDay(dayStr);
+        var wd = d.getDay() === 0 ? 7 : d.getDay();
+        d.setDate(d.getDate() + 4 - wd);
+        var yearStart = new Date(d.getFullYear(), 0, 1, 12);
+        return Math.round(((d - yearStart) / 86400000 + 1) / 7 + 0.49) | 0 || 1;
+    }
+    // Fraction of the current logical day elapsed (0..1), from the 02:30 boundary.
+    function logicalDayFraction(now) {
+        var shifted = new Date(now.getTime() - ROLLOVER_MIN * 60000);
+        return (shifted.getHours() * 3600 + shifted.getMinutes() * 60 + shifted.getSeconds()) / 86400;
+    }
+
+    // ---- row normalization (identical rules to the watch reconcile) ----
+    function localDateOf(ts) {
+        if (!ts) return '';
+        var d = new Date(ts);
+        return isNaN(d.getTime()) ? '' : fmtDate(d);
+    }
+    function rolledDateOf(ts) {
+        if (!ts) return '';
+        var d = new Date(ts);
+        return isNaN(d.getTime()) ? '' : fmtDate(new Date(d.getTime() - ROLLOVER_MIN * 60000));
+    }
+    // Legacy rows saved before the cutoff fix stored the raw calendar day.
+    function hasStoredCutoffMiss(row) {
+        if (!row || !row.created_at || !row.session_date) return false;
+        var logged = localDateOf(row.created_at);
+        var rolled = rolledDateOf(row.created_at);
+        return !!logged && !!rolled && row.session_date === logged && rolled !== logged;
+    }
+    function effectiveDay(row) {
+        if (hasStoredCutoffMiss(row)) return rolledDateOf(row.created_at);
+        if (row.session_date) return row.session_date;
+        if (row.created_at) return rolledDateOf(row.created_at);
+        return '';
+    }
+    function rolloverBadge(row, effective) {
+        if (!row.created_at || !effective) return false;
+        var logged = localDateOf(row.created_at);
+        return !!logged && logged !== effective && rolledDateOf(row.created_at) === effective;
+    }
+
+    // Validate + enrich raw Supabase rows. Invalid rows are excluded and
+    // reported, never silently dropped.
+    function normalize(rows) {
+        var ok = [], excluded = [];
+        (rows || []).forEach(function (r) {
+            var day = r ? effectiveDay(r) : '';
+            var dur = r ? Number(r.duration) : NaN;
+            if (!r || !day || !/^\d{4}-\d{2}-\d{2}$/.test(day)) { excluded.push({ row: r, reason: 'no usable date' }); return; }
+            if (!isFinite(dur) || dur <= 0 || dur > 1440) { excluded.push({ row: r, reason: 'bad duration' }); return; }
+            ok.push({
+                id: r.id,
+                day: day,
+                week: weekStart(day),
+                month: day.substring(0, 7),
+                duration: Math.round(dur),
+                tag: (typeof r.tag === 'string' && r.tag) ? r.tag : 'Uncategorized',
+                created_at: r.created_at || null,
+                session_date: r.session_date || null,
+                rollover: rolloverBadge(r, day)
+            });
+        });
+        ok.sort(function (a, b) { return a.day < b.day ? -1 : a.day > b.day ? 1 : (a.id || 0) - (b.id || 0); });
+        return { sessions: ok, excluded: excluded };
+    }
+
+    // ---- generic aggregation ----
+    function sumBy(sessions, keyFn) {
+        var m = {};
+        sessions.forEach(function (s) { var k = keyFn(s); m[k] = (m[k] || 0) + s.duration; });
+        return m;
+    }
+    function countBy(sessions, keyFn) {
+        var m = {};
+        sessions.forEach(function (s) { var k = keyFn(s); m[k] = (m[k] || 0) + 1; });
+        return m;
+    }
+    function median(nums) {
+        if (!nums.length) return 0;
+        var a = nums.slice().sort(function (x, y) { return x - y; });
+        var mid = a.length >> 1;
+        return a.length % 2 ? a[mid] : Math.round((a[mid - 1] + a[mid]) / 2);
+    }
+    function inWindow(s, fromDay, toDay) { return s.day >= fromDay && s.day <= toDay; }
+
+    // ---- streaks ----
+    function currentStreak(byDay, today) {
+        var d = today, n = 0;
+        if (!byDay[d]) d = addDays(d, -1);
+        while (byDay[d]) { n++; d = addDays(d, -1); }
+        return n;
+    }
+    function bestStreak(byDay) {
+        var days = Object.keys(byDay).sort();
+        var best = 0, cur = 0, prev = null;
+        days.forEach(function (d) {
+            cur = (prev && dayDiff(prev, d) === 1) ? cur + 1 : 1;
+            if (cur > best) best = cur;
+            prev = d;
+        });
+        return best;
+    }
+    function longestGap(byDay, fromDay, toDay) {
+        var gap = 0, run = 0, d = fromDay;
+        while (d <= toDay) {
+            run = byDay[d] ? 0 : run + 1;
+            if (run > gap) gap = run;
+            d = addDays(d, 1);
+        }
+        return gap;
+    }
+
+    // ---- the single derived model ----
+    // sessions: normalized; tag: 'All' or category; goalMinutes: weekly goal for
+    // the active filter; now: Date. All metrics below honor the active filter.
+    function computeAnalytics(allSessions, tag, goalMinutes, now) {
+        var sessions = tag === 'All' ? allSessions : allSessions.filter(function (s) { return s.tag === tag; });
+        var today = logicalToday(now);
+        var wkStart = weekStart(today);
+        var byDay = sumBy(sessions, function (s) { return s.day; });
+        var byWeek = sumBy(sessions, function (s) { return s.week; });
+        var byMonth = sumBy(sessions, function (s) { return s.month; });
+        var sessionsByDay = {};
+        sessions.forEach(function (s) { (sessionsByDay[s.day] = sessionsByDay[s.day] || []).push(s); });
+
+        var activeDays = Object.keys(byDay).sort();
+        var totalMin = 0;
+        sessions.forEach(function (s) { totalMin += s.duration; });
+
+        // -- current week / pace --
+        var dayIdx = dayDiff(wkStart, today); // 0=Mon .. 6=Sun
+        var weekMin = 0, weekDays = [];
+        for (var i = 0; i < 7; i++) {
+            var d = addDays(wkStart, i);
+            var v = byDay[d] || 0;
+            weekDays.push({ day: d, minutes: v, isToday: d === today, isFuture: d > today });
+            if (d <= today) weekMin += v;
+        }
+        var elapsedFrac = Math.min(1, (dayIdx + logicalDayFraction(now)) / 7);
+        var remainingDays = 6 - dayIdx + (1 - logicalDayFraction(now)); // fractional days left
+        var expectedByNow = goalMinutes > 0 ? goalMinutes * elapsedFrac : 0;
+        var aheadMin = goalMinutes > 0 ? weekMin - expectedByNow : 0;
+        var remainingToGoal = goalMinutes > 0 ? Math.max(0, goalMinutes - weekMin) : 0;
+        var requiredPerDay = goalMinutes > 0 && remainingDays > 0.04 ? remainingToGoal / remainingDays : 0;
+
+        // -- prior weeks (complete) --
+        var prevWeeks = [];
+        for (var w = 1; w <= 8; w++) {
+            var ws = addDays(wkStart, -7 * w);
+            prevWeeks.push({ weekStart: ws, minutes: byWeek[ws] || 0 });
+        }
+        var goalHitCount = 0, goalHitTotal = 0;
+        if (goalMinutes > 0) {
+            prevWeeks.forEach(function (pw) {
+                var hadHistory = activeDays.length && pw.weekStart >= weekStart(activeDays[0]);
+                if (hadHistory) { goalHitTotal++; if (pw.minutes >= goalMinutes) goalHitCount++; }
+            });
+        }
+
+        // -- same-days comparison vs last week (Mon..today's weekday) --
+        var lastWkSameSpan = 0;
+        for (var j = 0; j <= dayIdx; j++) lastWkSameSpan += byDay[addDays(wkStart, -7 + j)] || 0;
+        var weekDeltaMin = weekMin - lastWkSameSpan;
+
+        // -- rolling windows --
+        var win28from = addDays(today, -27);
+        var win7from = addDays(today, -6);
+        var s28 = sessions.filter(function (s) { return inWindow(s, win28from, today); });
+        var s7 = sessions.filter(function (s) { return inWindow(s, win7from, today); });
+        var min28 = 0; s28.forEach(function (s) { min28 += s.duration; });
+        var min7 = 0; s7.forEach(function (s) { min7 += s.duration; });
+        var active7 = 0, active28 = 0, thresholdDays28 = 0;
+        for (var k = 0; k < 28; k++) {
+            var dd = addDays(win28from, k);
+            var mv = byDay[dd] || 0;
+            if (mv > 0) { active28++; if (k >= 21) active7++; }
+            if (mv >= 25) thresholdDays28++;
+        }
+        var dailyAvg28 = min28 / 28; // calendar-day average, zero days included
+        var projected = goalMinutes > 0 ? weekMin + dailyAvg28 * remainingDays : 0;
+
+        // -- per-session stats (28d) --
+        var durs28 = s28.map(function (s) { return s.duration; });
+        var focusMin = 0;
+        s28.forEach(function (s) { if (s.duration >= 45) focusMin += s.duration; });
+        var histBins = [
+            { label: '< 25m', min: 0, max: 24, minutes: 0, count: 0 },
+            { label: '25–49m', min: 25, max: 49, minutes: 0, count: 0 },
+            { label: '50–89m', min: 50, max: 89, minutes: 0, count: 0 },
+            { label: '≥ 90m', min: 90, max: 100000, minutes: 0, count: 0 }
+        ];
+        s28.forEach(function (s) {
+            for (var b = 0; b < histBins.length; b++) {
+                if (s.duration >= histBins[b].min && s.duration <= histBins[b].max) { histBins[b].minutes += s.duration; histBins[b].count++; break; }
+            }
+        });
+
+        // -- time of day (rows with created_at only) --
+        var todBuckets = [
+            { label: '05–09', from: 5 }, { label: '09–13', from: 9 }, { label: '13–17', from: 13 },
+            { label: '17–21', from: 17 }, { label: '21–01', from: 21 }, { label: '01–05', from: 1 }
+        ];
+        var todMinutes = [0, 0, 0, 0, 0, 0], todKnown = 0;
+        s28.forEach(function (s) {
+            if (!s.created_at) return;
+            var t = new Date(s.created_at);
+            if (isNaN(t.getTime())) return;
+            var h = t.getHours();
+            var idx = h >= 5 && h < 9 ? 0 : h >= 9 && h < 13 ? 1 : h >= 13 && h < 17 ? 2 : h >= 17 && h < 21 ? 3 : (h >= 21 || h < 1) ? 4 : 5;
+            todMinutes[idx] += s.duration; todKnown++;
+        });
+
+        // -- weekday rhythm: avg minutes per calendar weekday over last 8 weeks --
+        var rhythmFrom = addDays(wkStart, -7 * 8);
+        var rhythmTo = addDays(wkStart, -1); // complete weeks only
+        var weekdayTotals = [0, 0, 0, 0, 0, 0, 0];
+        for (var rd = rhythmFrom; rd <= rhythmTo; rd = addDays(rd, 1)) {
+            weekdayTotals[dayDiff(weekStart(rd), rd)] += byDay[rd] || 0;
+        }
+        var weekdayAvg = weekdayTotals.map(function (v) { return v / 8; });
+
+        // -- categories over 28d, vs prior 28d --
+        var prior28from = addDays(win28from, -28), prior28to = addDays(win28from, -1);
+        var pool = allSessions; // category table always spans all tags, independent of the filter
+        var cat28 = {}, catPrior = {}, catCount28 = {}, catDays28 = {}, catDurs28 = {};
+        pool.forEach(function (s) {
+            if (inWindow(s, win28from, today)) {
+                cat28[s.tag] = (cat28[s.tag] || 0) + s.duration;
+                catCount28[s.tag] = (catCount28[s.tag] || 0) + 1;
+                (catDays28[s.tag] = catDays28[s.tag] || {})[s.day] = true;
+                (catDurs28[s.tag] = catDurs28[s.tag] || []).push(s.duration);
+            } else if (inWindow(s, prior28from, prior28to)) {
+                catPrior[s.tag] = (catPrior[s.tag] || 0) + s.duration;
+            }
+        });
+        var cat28Total = 0, catPriorTotal = 0;
+        Object.keys(cat28).forEach(function (t) { cat28Total += cat28[t]; });
+        Object.keys(catPrior).forEach(function (t) { catPriorTotal += catPrior[t]; });
+        var categories = Object.keys(cat28).map(function (t) {
+            var share = cat28Total > 0 ? cat28[t] / cat28Total : 0;
+            var priorShare = catPriorTotal > 0 ? (catPrior[t] || 0) / catPriorTotal : null;
+            return {
+                tag: t, minutes: cat28[t], share: share,
+                deltaShare: priorShare === null ? null : share - priorShare,
+                sessions: catCount28[t] || 0,
+                activeDays: Object.keys(catDays28[t] || {}).length,
+                medianSession: median(catDurs28[t] || [])
+            };
+        }).sort(function (a, b) { return b.minutes - a.minutes; });
+
+        // -- records --
+        var bestDayVal = 0, bestDayKey = '';
+        activeDays.forEach(function (d2) { if (byDay[d2] > bestDayVal) { bestDayVal = byDay[d2]; bestDayKey = d2; } });
+        var bestWeekVal = 0, bestWeekKey = '';
+        Object.keys(byWeek).forEach(function (w2) { if (byWeek[w2] > bestWeekVal) { bestWeekVal = byWeek[w2]; bestWeekKey = w2; } });
+        var longestSession = 0, longestSessionDay = '';
+        sessions.forEach(function (s) { if (s.duration > longestSession) { longestSession = s.duration; longestSessionDay = s.day; } });
+
+        return {
+            tag: tag, today: today, weekStart: wkStart, now: now,
+            sessions: sessions, sessionsByDay: sessionsByDay,
+            byDay: byDay, byWeek: byWeek, byMonth: byMonth,
+            totalMin: totalMin, totalSessions: sessions.length,
+            activeDays: activeDays, firstDay: activeDays[0] || null,
+            todayMin: byDay[today] || 0,
+            todaySessions: (sessionsByDay[today] || []).length,
+            categories: categories,
+            week: {
+                minutes: weekMin, days: weekDays, dayIdx: dayIdx,
+                deltaVsLastWeekSameDays: weekDeltaMin, lastWeekSameDays: lastWkSameSpan,
+                goalMinutes: goalMinutes, elapsedFrac: elapsedFrac, expectedByNow: expectedByNow,
+                aheadMin: aheadMin, remainingToGoal: remainingToGoal,
+                requiredPerDay: requiredPerDay, remainingDays: remainingDays,
+                projected: projected, pct: goalMinutes > 0 ? weekMin / goalMinutes : null
+            },
+            prevWeeks: prevWeeks, goalHitCount: goalHitCount, goalHitTotal: goalHitTotal,
+            rolling: { min7: min7, min28: min28, active7: active7, active28: active28, dailyAvg28: dailyAvg28, thresholdDays28: thresholdDays28, win28from: win28from },
+            sessions28: {
+                count: s28.length, medianDur: median(durs28),
+                meanDur: s28.length ? Math.round(durs28.reduce(function (a, b) { return a + b; }, 0) / s28.length) : 0,
+                perActiveDay: active28 ? s28.length / active28 : 0,
+                focusShare: min28 > 0 ? focusMin / min28 : 0,
+                histBins: histBins
+            },
+            tod: { buckets: todBuckets, minutes: todMinutes, known: todKnown, of: s28.length },
+            weekdayAvg: weekdayAvg,
+            consistency: { streak: currentStreak(byDay, today), bestStreak: bestStreak(byDay), longestGap28: activeDays.length ? longestGap(byDay, win28from, today) : 28 },
+            records: {
+                bestDay: { minutes: bestDayVal, day: bestDayKey },
+                bestWeek: { minutes: bestWeekVal, weekStart: bestWeekKey },
+                longestSession: { minutes: longestSession, day: longestSessionDay },
+                totalSessions: sessions.length
+            },
+            avgPerActiveDay: activeDays.length ? totalMin / activeDays.length : 0
+        };
+    }
+
+    // ---- daily/weekly series for the trend chart ----
+    function dailySeries(a, days) {
+        var out = [], from = addDays(a.today, -(days - 1));
+        for (var i = 0; i < days; i++) {
+            var d = addDays(from, i);
+            out.push({ key: d, minutes: a.byDay[d] || 0, isToday: d === a.today });
+        }
+        // 7-day rolling mean, zero days included, needs a full trailing window
+        var roll = out.map(function (_, i) {
+            if (i < 6) return null;
+            var s = 0;
+            for (var j = i - 6; j <= i; j++) s += out[j].minutes;
+            return s / 7;
+        });
+        return { points: out, rolling: roll, rollingLabel: '7-day average' };
+    }
+    function weeklySeries(a, weeks) {
+        var out = [];
+        for (var i = weeks - 1; i >= 0; i--) {
+            var ws = addDays(a.weekStart, -7 * i);
+            out.push({ key: ws, minutes: a.byWeek[ws] || 0, isCurrent: ws === a.weekStart });
+        }
+        var roll = out.map(function (_, i) {
+            if (i < 3) return null;
+            var s = 0;
+            for (var j = i - 3; j <= i; j++) s += out[j].minutes;
+            return s / 4;
+        });
+        return { points: out, rolling: roll, rollingLabel: '4-week average' };
+    }
+    function cumulativeSeries(a) {
+        if (!a.firstDay) return [];
+        var out = [], cum = 0;
+        for (var d = a.firstDay; d <= a.today; d = addDays(d, 1)) {
+            cum += a.byDay[d] || 0;
+            out.push({ key: d, hours: cum / 60 });
+        }
+        return out;
+    }
+
+    // ---- keyset pagination (pure; fetchPage(lastId) -> Promise<rows[]>) ----
+    // Walks pages by primary key (id > lastId) so concurrent inserts/deletes
+    // cannot shift a window and cause a skip or duplicate. Dedupes defensively,
+    // bounds the loop, and rejects (never returns partial) if any page throws.
+    async function pageWalk(fetchPage, pageSize) {
+        var out = [], seen = {}, lastId = 0, guard = 0;
+        for (;;) {
+            if (++guard > 10000) throw new Error('pagination guard tripped');
+            var rows = await fetchPage(lastId);
+            if (!Array.isArray(rows)) throw new Error('page did not return an array');
+            for (var i = 0; i < rows.length; i++) {
+                var row = rows[i];
+                if (row && row.id != null && !seen[row.id]) { seen[row.id] = 1; out.push(row); }
+                if (row && row.id != null && row.id > lastId) lastId = row.id;
+            }
+            if (rows.length < pageSize) break;
+        }
+        return out;
+    }
+
+    // ---- CSV ----
+    function csvValue(v) { return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; }
+    function buildCsv(sessions) {
+        var lines = ['id,logical_day,stored_session_date,created_at_utc,duration_min,category'];
+        sessions.slice().sort(function (x, y) { return x.day < y.day ? -1 : x.day > y.day ? 1 : (x.id || 0) - (y.id || 0); })
+            .forEach(function (s) {
+                lines.push([csvValue(s.id), csvValue(s.day), csvValue(s.session_date), csvValue(s.created_at), csvValue(s.duration), csvValue(s.tag)].join(','));
+            });
+        return lines.join('\n');
+    }
+    function csvFilename(sessions, tag, today) {
+        var from = sessions.length ? sessions[0].day : today;
+        var to = sessions.length ? sessions[sessions.length - 1].day : today;
+        var f = tag === 'All' ? 'all' : tag.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        return 'timebox_sessions_' + from + '_to_' + to + '_' + f + '.csv';
+    }
+
+    // ---- formatting (presentation only) ----
+    function fmtHM(min) {
+        min = Math.round(min);
+        if (min < 60) return min + 'm';
+        var h = Math.floor(min / 60), m = min % 60;
+        return m === 0 ? h + 'h' : h + 'h ' + pad2(m) + 'm';
+    }
+    function fmtH1(min) { return (Math.round(min / 6) / 10) + 'h'; }
+    function fmtSigned(min) { return (min >= 0 ? '+' : '−') + fmtHM(Math.abs(min)); }
+    function fmtDayLong(dayStr) { return parseDay(dayStr).toLocaleDateString('en', { weekday: 'long', month: 'long', day: 'numeric' }); }
+    function fmtDayShort(dayStr) { return parseDay(dayStr).toLocaleDateString('en', { month: 'short', day: 'numeric' }); }
+
+    return {
+        ROLLOVER_MIN: ROLLOVER_MIN,
+        fmtDate: fmtDate, parseDay: parseDay, addDays: addDays, dayDiff: dayDiff,
+        logicalToday: logicalToday, calendarToday: calendarToday, weekStart: weekStart, isoWeek: isoWeek,
+        normalize: normalize, effectiveDay: effectiveDay, computeAnalytics: computeAnalytics,
+        dailySeries: dailySeries, weeklySeries: weeklySeries, cumulativeSeries: cumulativeSeries,
+        buildCsv: buildCsv, csvFilename: csvFilename, median: median, pageWalk: pageWalk,
+        fmtHM: fmtHM, fmtH1: fmtH1, fmtSigned: fmtSigned, fmtDayLong: fmtDayLong, fmtDayShort: fmtDayShort
+    };
+})();
+if (typeof module !== 'undefined' && module.exports) { module.exports = TB; }
+</script>
+
 <script>
+/* ============================================================
+   App layer: data access, state, rendering. All numbers come
+   from TB.computeAnalytics — renderers only format and draw.
+   ============================================================ */
 var SUPABASE_URL = 'https://gujufwafdradmmehtafx.supabase.co';
 var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd1anVmd2FmZHJhZG1tZWh0YWZ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUxMjE5NDYsImV4cCI6MjA5MDY5Nzk0Nn0.cd9vSriuByxKNaWQhLNWfaiBgEjabrn_9zN6LNlPvrM';
-var SESSION_DAY_ROLLOVER_MINUTES = 150;
+var PROJECT_COLORS = ['#6c5ce7', '#00b894', '#e17055', '#fdcb6e', '#74b9ff', '#a29bfe', '#55efc4'];
+var DEMO = new URLSearchParams(location.search).get('demo') === '1';
 
-// One color per project slot — assigned in alphabetical order of tag name
-var PROJECT_COLORS = ['#6c5ce7', '#00b894', '#e17055', '#fdcb6e', '#74b9ff'];
+var state = {
+    raw: [],            // normalized sessions (all tags)
+    excluded: [],
+    tag: 'All',
+    analytics: null,
+    trendRange: '28d',
+    hmWeeks: 16,
+    selectedDay: null,  // heatmap selection; also filters the feed
+    feedLimit: 100,
+    lastSync: null,
+    fetchGen: 0        // bumped per refresh; a stale in-flight fetch is discarded
+};
 
-var currentTag = 'All';
-var allSessions = [];
-
-// ---------- SUPABASE ----------
+// ---------- data access ----------
 function supaFetch(path, opts) {
     opts = opts || {};
-    return fetch(SUPABASE_URL + '/rest/v1/' + path, {
-        method: opts.method || 'GET',
-        headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': opts.prefer || '' },
-        body: opts.body ? JSON.stringify(opts.body) : undefined
-    });
+    var headers = { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json' };
+    if (opts.prefer) headers['Prefer'] = opts.prefer;
+    if (opts.range) headers['Range'] = opts.range;
+    return fetch(SUPABASE_URL + '/rest/v1/' + path, { method: opts.method || 'GET', headers: headers, body: opts.body ? JSON.stringify(opts.body) : undefined });
 }
 
-async function loadSessions() {
-    try {
-        var r = await supaFetch('sessions?select=*&order=session_date.desc,created_at.desc');
-        if (!r.ok) throw new Error(r.status);
-        var data = await r.json();
-        setStatus(true);
-        return data;
-    } catch(e) { setStatus(false); return []; }
+// Paged fetch. PostgREST caps un-ranged requests (default 1000 rows), so
+// history must be walked in pages. Keyset pagination on the primary key
+// (id > lastId) is stable under concurrent inserts/deletes — unlike offset
+// ranges, a row added or removed mid-walk cannot shift the window and cause
+// a skip or duplicate. A seen-set is a second guard; a page counter bounds
+// the loop. Any page failing aborts the whole fetch so a partial history is
+// never mistaken for a complete one.
+function fetchAllSessions() {
+    var page = 1000;
+    return TB.pageWalk(function (lastId) {
+        return supaFetch('sessions?select=*&id=gt.' + lastId + '&order=id.asc&limit=' + page).then(function (r) {
+            if (!r.ok && r.status !== 206) throw new Error('HTTP ' + r.status);
+            return r.json();
+        });
+    }, page);
 }
 
-function setStatus(on) {
-    var t = document.getElementById('statusText');
-    t.innerHTML = on
-        ? '<span class="status-dot online"></span>Connected to Supabase'
-        : '<span class="status-dot offline"></span>Offline — check connection';
-}
-
-// ---------- PROJECTS ----------
-// Returns sorted list of project tags that have at least one session.
-// Falls back to ['Studying'] if the DB is empty so the dashboard is never blank.
-function getProjectTags(sessions) {
-    var seen = {}, tags = [];
-    sessions.forEach(function(s) {
-        if (s.tag && !seen[s.tag]) { seen[s.tag] = true; tags.push(s.tag); }
-    });
-    tags.sort();
-    return tags.length > 0 ? tags : ['Studying'];
-}
-
-function colorForTag(tag, tags) {
-    var idx = tags.indexOf(tag);
-    return idx >= 0 ? PROJECT_COLORS[idx % PROJECT_COLORS.length] : PROJECT_COLORS[0];
-}
-
-// ---------- PER-PROJECT GOALS ----------
-function goalKeyFor(tag) { return 'weeklyGoal_' + tag; }
-function goalKey() { return goalKeyFor(currentTag); }
-function getGoalMinsFor(tag) {
-    var v = localStorage.getItem(goalKeyFor(tag));
-    return v ? parseFloat(v) : 0;
-}
-function getGoalHours() {
-    if (currentTag === 'All') {
-        // Sum all per-project goals
-        var tags = getProjectTags(allSessions);
-        var total = 0;
-        for (var i = 0; i < tags.length; i++) { total += getGoalMinsFor(tags[i]); }
-        return total / 60;
-    }
-    var h = parseInt(document.getElementById('goalHrs').value) || 0;
-    var m = parseInt(document.getElementById('goalMins').value) || 0;
-    return h + m / 60;
-}
-function loadGoal() {
-    var edit = document.getElementById('goalEditWrap');
-    if (currentTag === 'All') {
-        edit.style.display = 'none';
-        return;
-    }
-    edit.style.display = 'flex';
-    var v = localStorage.getItem(goalKey());
-    var totalMins = v ? parseFloat(v) : 0;
-    var h = Math.floor(totalMins / 60);
-    var m = Math.round(totalMins % 60);
-    document.getElementById('goalHrs').value = h;
-    document.getElementById('goalMins').value = m;
-}
-function saveGoal() {
-    var h = parseInt(document.getElementById('goalHrs').value) || 0;
-    var m = parseInt(document.getElementById('goalMins').value) || 0;
-    localStorage.setItem(goalKey(), h * 60 + m);
-}
-
-// ---------- TABS ----------
-function buildTabs(sessions) {
-    var tags = getProjectTags(sessions);
-    var tabBar = document.getElementById('tabBar');
-    tabBar.innerHTML = '';
-
-    ['All'].concat(tags).forEach(function(label) {
-        var el = document.createElement('button');
-        el.className = 'tab' + (label === currentTag ? ' active' : '');
-        el.textContent = label;
-        if (label === currentTag && label !== 'All') {
-            el.style.background = colorForTag(label, tags);
+function demoSessions() {
+    // Deterministic fixture set: ~90 days, no network, no writes.
+    var tags = ['Aff project', 'Book', 'Meditation', 'Studying'];
+    var rows = [], id = 1;
+    var today = TB.logicalToday(new Date());
+    for (var i = 89; i >= 0; i--) {
+        var day = TB.addDays(today, -i);
+        var seed = (i * 2654435761) % 100;
+        if (seed < 25 && i !== 0) continue; // rest days
+        var n = 1 + (seed % 3);
+        for (var s = 0; s < n; s++) {
+            var dur = [25, 50, 90, 50, 25][(seed + s) % 5];
+            var hr = 9 + ((seed + s * 3) % 12);
+            var hh = hr < 10 ? '0' + hr : '' + hr; // valid ISO hour, no "Invalid Date" in demo
+            rows.push({ id: id++, session_date: day, created_at: day + 'T' + hh + ':15:00+02:00', duration: dur, tag: tags[(seed + s) % 4] });
         }
-        el.onclick = function() {
-            currentTag = label;
-            loadGoal();
-            buildTabs(sessions);
-            syncTagDropdown(tags);
-            renderAll(allSessions);
-        };
-        tabBar.appendChild(el);
-    });
-}
-
-// ---------- TAG DROPDOWN ----------
-function buildTagDropdown(sessions) {
-    var tags = getProjectTags(sessions);
-    var sel = document.getElementById('sessionTag');
-    sel.innerHTML = tags.map(function(t) { return '<option value="' + t + '">' + t + '</option>'; }).join('');
-    syncTagDropdown(tags);
-}
-
-function syncTagDropdown(tags) {
-    var sel = document.getElementById('sessionTag');
-    if (currentTag !== 'All' && tags.indexOf(currentTag) >= 0) sel.value = currentTag;
-}
-
-// ---------- ADD / DELETE ----------
-async function addSession() {
-    var rawDate = document.getElementById('sessionDate').value;
-    var d = resolveManualSessionDate(rawDate);
-    var m = parseInt(document.getElementById('sessionMinutes').value);
-    var tag = document.getElementById('sessionTag').value || 'Studying';
-    if (!d || !m || m < 1) return;
-    if (d !== rawDate) document.getElementById('sessionDate').value = d;
-    document.getElementById('addBtn').disabled = true;
-    try {
-        await supaFetch('sessions', { method: 'POST', prefer: 'return=representation', body: { session_date: d, duration: m, tag: tag } });
-        await refreshAll();
-    } catch(e) { alert('Failed to save.'); }
-    document.getElementById('addBtn').disabled = false;
-}
-
-function quickAdd(mins) {
-    document.getElementById('sessionMinutes').value = mins;
-    if (!document.getElementById('sessionDate').value) document.getElementById('sessionDate').value = getToday();
-    addSession();
-}
-
-async function deleteSession(id) {
-    try { await supaFetch('sessions?id=eq.' + id, { method: 'DELETE' }); await refreshAll(); } catch(e) { console.error('Delete failed:', e); }
-}
-
-function exportCsv() {
-    var rows = allSessions.slice().sort(function(a, b) {
-        var left = effectiveSessionDate(a) + ' ' + (a.created_at || '');
-        var right = effectiveSessionDate(b) + ' ' + (b.created_at || '');
-        return left.localeCompare(right);
-    });
-
-    var lines = ['id,session_date,created_at,duration,tag'];
-    rows.forEach(function(row) {
-        lines.push([
-            csvValue(row.id),
-            csvValue(effectiveSessionDate(row)),
-            csvValue(row.created_at),
-            csvValue(row.duration),
-            csvValue(row.tag || '')
-        ].join(','));
-    });
-
-    var blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
-    var url = URL.createObjectURL(blob);
-    var link = document.createElement('a');
-    link.href = url;
-    link.download = 'timebox-sessions-' + getToday() + '.csv';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-}
-
-function csvValue(value) {
-    var text = value == null ? '' : String(value);
-    return '"' + text.replace(/"/g, '""') + '"';
-}
-
-// ---------- HELPERS ----------
-function formatLocalDate(date) {
-    var y = date.getFullYear();
-    var m = String(date.getMonth() + 1);
-    if (m.length < 2) m = '0' + m;
-    var d = String(date.getDate());
-    if (d.length < 2) d = '0' + d;
-    return y + '-' + m + '-' + d;
-}
-
-function getSessionNow() {
-    return new Date(Date.now() - SESSION_DAY_ROLLOVER_MINUTES * 60000);
-}
-
-function getCalendarToday() {
-    return formatLocalDate(new Date());
-}
-
-function getToday() {
-    return formatLocalDate(getSessionNow());
-}
-
-function resolveManualSessionDate(dateValue) {
-    if (!dateValue) return '';
-    return dateValue === getCalendarToday() ? getToday() : dateValue;
-}
-
-function getWeekStart(d) {
-    var dt = new Date(d + 'T12:00:00');
-    var day = dt.getDay();
-    dt.setDate(dt.getDate() - day + (day === 0 ? -6 : 1));
-    return formatLocalDate(dt);
-}
-
-function getIsoWeekNumber(date) {
-    var dt = new Date(date.getTime());
-    dt.setHours(12, 0, 0, 0);
-    var day = dt.getDay();
-    if (day === 0) day = 7;
-    dt.setDate(dt.getDate() + 4 - day);
-    var yearStart = new Date(dt.getFullYear(), 0, 1);
-    return Math.ceil((((dt - yearStart) / 86400000) + 1) / 7);
-}
-
-function rolloverSessionDate(value) {
-    if (!value) return '';
-    var loggedAt = new Date(value);
-    if (isNaN(loggedAt.getTime())) return '';
-    return formatLocalDate(new Date(loggedAt.getTime() - SESSION_DAY_ROLLOVER_MINUTES * 60000));
-}
-
-function loggedSessionDate(value) {
-    if (!value) return '';
-    var loggedAt = new Date(value);
-    if (isNaN(loggedAt.getTime())) return '';
-    return formatLocalDate(loggedAt);
-}
-
-function hasStoredCutoffMiss(row) {
-    if (!row || !row.created_at || !row.session_date) return false;
-    var loggedDate = loggedSessionDate(row.created_at);
-    var rolledDate = rolloverSessionDate(row.created_at);
-    return !!loggedDate && !!rolledDate && row.session_date === loggedDate && rolledDate !== loggedDate;
-}
-
-function effectiveSessionDate(row) {
-    if (hasStoredCutoffMiss(row)) {
-        return rolloverSessionDate(row.created_at);
     }
-    if (row.session_date) {
-        return row.session_date;
-    }
-    if (row.created_at) {
-        return rolloverSessionDate(row.created_at);
-    }
-    return '';
-}
-
-function hasRolloverBadge(row, effectiveDate) {
-    if (!row.created_at || !effectiveDate) return false;
-    var loggedDate = loggedSessionDate(row.created_at);
-    var rolledDate = rolloverSessionDate(row.created_at);
-    return !!loggedDate && loggedDate !== effectiveDate && rolledDate === effectiveDate;
-}
-
-function sumByDate(s) {
-    var m = {};
-    s.forEach(function(x) {
-        var key = effectiveSessionDate(x);
-        m[key] = (m[key] || 0) + x.duration;
-    });
-    return m;
-}
-
-function sumByWeek(s) {
-    var m = {};
-    s.forEach(function(x) {
-        var w = getWeekStart(effectiveSessionDate(x));
-        m[w] = (m[w] || 0) + x.duration;
-    });
-    return m;
-}
-
-function sumByMonth(s) {
-    var m = {};
-    s.forEach(function(x) {
-        var k = effectiveSessionDate(x).substring(0, 7);
-        m[k] = (m[k] || 0) + x.duration;
-    });
-    return m;
-}
-
-function getStreak(s) {
-    var bd = sumByDate(s); var d = new Date(getToday() + 'T12:00:00'); var st = 0;
-    if (!bd[formatLocalDate(d)]) d.setDate(d.getDate() - 1);
-    while (bd[formatLocalDate(d)]) { st++; d.setDate(d.getDate() - 1); }
-    return st;
-}
-function getBestStreak(s) {
-    var bd = sumByDate(s); var dates = Object.keys(bd).sort(); var best = 0, cur = 0;
-    for (var i = 0; i < dates.length; i++) {
-        cur = (i > 0 && (new Date(dates[i]+'T00:00:00') - new Date(dates[i-1]+'T00:00:00')) / 86400000 === 1) ? cur + 1 : 1;
-        if (cur > best) best = cur;
-    }
-    return best;
-}
-
-function filterSessions(sessions) {
-    return currentTag === 'All' ? sessions : sessions.filter(function(s) { return s.tag === currentTag; });
-}
-
-function setChartNote(id, text) {
-    var el = document.getElementById(id);
-    if (el) {
-        el.innerHTML = text || '&nbsp;';
-    }
-}
-
-// ---------- STATS ----------
-function updateStats(sessions) {
-    var bd = sumByDate(sessions); var today = getToday();
-    document.getElementById('totalToday').textContent = (bd[today] || 0) + ' min';
-    var ws = getWeekStart(today); var wm = 0;
-    Object.keys(bd).forEach(function(d) { if (getWeekStart(d) === ws) wm += bd[d]; });
-    document.getElementById('totalWeek').textContent = Math.round(wm / 60 * 10) / 10 + ' hrs';
-    var allMin = sessions.reduce(function(a, x) { return a + x.duration; }, 0);
-    document.getElementById('totalAll').textContent = Math.round(allMin / 60 * 10) / 10;
-    var days = Object.keys(bd).length;
-    document.getElementById('avgPerDay').textContent = (days > 0 ? Math.round(allMin / days) : 0) + ' min';
-    document.getElementById('streakCount').textContent = getStreak(sessions);
-
-    var goal = getGoalHours();
-    if (goal <= 0) goal = 1;
-    // Build 4-week goal bars (current + 3 previous)
-    // Use getWeekStart consistently to avoid timezone double-shift
-    var weekStarts = [];
-    var ref = new Date(today + 'T12:00:00');
-    for (var wi = 0; wi < 4; wi++) {
-        weekStarts.push(getWeekStart(formatLocalDate(ref)));
-        ref.setDate(ref.getDate() - 7);
-    }
-    var container = document.getElementById('goalWeeks');
-    container.innerHTML = '';
-    for (var wi = 0; wi < weekStarts.length; wi++) {
-        var wk = weekStarts[wi];
-        var mins = 0;
-        Object.keys(bd).forEach(function(dd) { if (getWeekStart(dd) === wk) mins += bd[dd]; });
-        var hrs = Math.round(mins / 60 * 10) / 10;
-        var pct = goal > 0 ? Math.round((mins / 60) / goal * 100) : 0;
-        var cappedPct = Math.min(pct, 100);
-        var isCurrent = wi === 0;
-
-        // Date range label: Mon – Sun
-        var monDate = new Date(wk + 'T12:00:00');
-        var sunDate = new Date(wk + 'T12:00:00');
-        sunDate.setDate(sunDate.getDate() + 6);
-        var monStr = monDate.toLocaleDateString('en', { month: 'short', day: 'numeric' });
-        var sunStr = sunDate.toLocaleDateString('en', { month: 'short', day: 'numeric' });
-        var label = isCurrent ? 'This week' : monStr + ' – ' + sunStr;
-
-        var row = document.createElement('div');
-        row.className = 'goal-week' + (isCurrent ? ' current' : ' past');
-
-        var pctInside = cappedPct >= 25;
-        row.innerHTML =
-            '<div class="goal-week-label">' + label + '</div>' +
-            '<div class="goal-bar-track">' +
-                '<div class="goal-bar-fill' + (pct >= 100 ? ' over' : '') + '" style="width:' + cappedPct + '%">' +
-                    (pctInside ? '<span class="goal-pct">' + pct + '%</span>' : '') +
-                '</div>' +
-                (!pctInside && mins > 0 ? '<span class="goal-pct outside" style="left:' + (cappedPct + 2) + '%">' + pct + '%</span>' : '') +
-            '</div>' +
-            '<div class="goal-week-hrs">' + hrs + ' hrs</div>';
-        container.appendChild(row);
-    }
-
-    var bw = sumByWeek(sessions);
-    var bestDV = 0, bestDK = '', bestWV = 0, bestWK = '';
-    Object.keys(bd).forEach(function(d) { if (bd[d] > bestDV) { bestDV = bd[d]; bestDK = d; } });
-    Object.keys(bw).forEach(function(w) { if (bw[w] > bestWV) { bestWV = bw[w]; bestWK = w; } });
-    document.getElementById('bestDay').textContent = bestDV > 0 ? Math.round(bestDV / 60 * 10) / 10 + ' hrs' : '-';
-    document.getElementById('bestDayDate').textContent = bestDK ? new Date(bestDK + 'T00:00:00').toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' }) : '-';
-    document.getElementById('bestWeek').textContent = bestWV > 0 ? Math.round(bestWV / 60 * 10) / 10 + ' hrs' : '-';
-    document.getElementById('bestWeekDate').textContent = bestWK ? 'Week of ' + new Date(bestWK + 'T00:00:00').toLocaleDateString('en', { month: 'short', day: 'numeric' }) : '-';
-    document.getElementById('bestStreak').textContent = getBestStreak(sessions);
-    document.getElementById('totalSessions').textContent = sessions.length;
-}
-
-// ---------- HEATMAP ----------
-function buildHeatmap(sessions) {
-    var bd = sumByDate(sessions);
-    var grid = document.getElementById('heatmapGrid');
-    var weekLabels = document.getElementById('heatmapWeekLabels');
-    grid.innerHTML = '';
-    weekLabels.innerHTML = '';
-    var today = new Date(getToday() + 'T12:00:00'); var day = today.getDay(); var daysBack = (day === 0 ? 6 : day - 1) + 7 * 15;
-    var start = new Date(today); start.setDate(start.getDate() - daysBack);
-    var d = new Date(start);
-    var weekIndex = 0;
-    while (d <= today) {
-        var weekStart = new Date(d);
-        var label = document.createElement('div');
-        label.className = 'heatmap-week-label';
-        if (weekIndex % 2 === 0 || d.getTime() == start.getTime()) {
-            label.textContent = getIsoWeekNumber(weekStart);
-        }
-        label.title = 'Week ' + getIsoWeekNumber(weekStart);
-        weekLabels.appendChild(label);
-
-        var col = document.createElement('div'); col.className = 'heatmap-col';
-        for (var r = 0; r < 7; r++) {
-            var cell = document.createElement('div'); cell.className = 'heatmap-cell';
-            if (d <= today) {
-                var key = formatLocalDate(d); var mins = bd[key] || 0;
-                if (mins > 0 && mins < 60) cell.className = 'heatmap-cell l1';
-                else if (mins >= 60 && mins < 180) cell.className = 'heatmap-cell l2';
-                else if (mins >= 180 && mins < 360) cell.className = 'heatmap-cell l3';
-                else if (mins >= 360) cell.className = 'heatmap-cell l4';
-                cell.title = key + ': ' + mins + ' min';
-            }
-            col.appendChild(cell); d.setDate(d.getDate() + 1);
-        }
-        grid.appendChild(col);
-        weekIndex += 1;
-    }
-    document.getElementById('heatmapTitle').textContent = (currentTag === 'All' ? 'Activity' : currentTag) + ' — Last 16 Weeks';
-}
-
-// ---------- CHARTS ----------
-var charts = {};
-function cc() { return { accent: '#6c5ce7', accentLight: 'rgba(108,92,231,0.3)', green: '#00b894', greenLight: 'rgba(0,184,148,0.2)', text: '#8888a0', grid: 'rgba(42,42,58,0.6)' }; }
-
-function buildWeeklyChart(s) {
-    var bw = sumByWeek(s); var wks = Object.keys(bw).sort();
-    if (wks.length > 12) wks = wks.slice(wks.length - 12);
-    var labels = wks.map(function(w) { return new Date(w + 'T00:00:00').toLocaleDateString('en', { month: 'short', day: 'numeric' }); });
-    var data = wks.map(function(w) { return Math.round(bw[w] / 60 * 10) / 10; });
-    if (wks.length === 0) {
-        setChartNote('weeklyNote', 'No sessions in this view yet.');
-    } else if (wks.length < 3) {
-        setChartNote('weeklyNote', 'Light history so far. <strong>Weekly trend will fill in as you log more.</strong>');
-    } else {
-        setChartNote('weeklyNote', '');
-    }
-    var c = cc(); if (charts.w) charts.w.destroy();
-    charts.w = new Chart(document.getElementById('weeklyChart'), { type: 'bar', data: { labels: labels, datasets: [
-        { data: data, backgroundColor: c.accent, borderRadius: 6, borderSkipped: false, barPercentage: 0.6 },
-        { data: data, type: 'line', borderColor: c.green, backgroundColor: c.greenLight, borderWidth: 2, pointRadius: 4, pointBackgroundColor: c.green, tension: 0.3, fill: true, yAxisID: 'y' }
-    ]}, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
-        scales: { y: { beginAtZero: true, grid: { color: c.grid }, ticks: { color: c.text, callback: function(v) { return v + 'h'; } } }, x: { grid: { display: false }, ticks: { color: c.text, font: { size: 11 } } } } } });
-    document.getElementById('weeklyTitle').textContent = currentTag === 'All' ? 'Weekly Time' : 'Weekly — ' + currentTag;
-}
-
-function buildDailyChart(s) {
-    var bd = sumByDate(s); var today = getToday(); var ws = getWeekStart(today);
-    var labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']; var data = [];
-    var d = new Date(ws + 'T00:00:00');
-    for (var i = 0; i < 7; i++) { data.push(bd[formatLocalDate(d)] || 0); d.setDate(d.getDate() + 1); }
-    var active = 0;
-    for (var j = 0; j < data.length; j++) {
-        if (data[j] > 0) { active += 1; }
-    }
-    if (active === 0) {
-        setChartNote('dailyNote', 'No active days in this week yet.');
-    } else if (active < 3) {
-        setChartNote('dailyNote', 'Only <strong>' + active + ' active day' + (active === 1 ? '' : 's') + '</strong> in this week so far.');
-    } else {
-        setChartNote('dailyNote', '');
-    }
-    var c = cc(); if (charts.d) charts.d.destroy();
-    charts.d = new Chart(document.getElementById('dailyChart'), { type: 'bar', data: { labels: labels, datasets: [{ data: data,
-        backgroundColor: data.map(function(v, i) { var dd = new Date(ws + 'T00:00:00'); dd.setDate(dd.getDate() + i); return formatLocalDate(dd) === today ? c.green : c.accent; }),
-        borderRadius: 6, borderSkipped: false, barPercentage: 0.5 }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
-            scales: { y: { beginAtZero: true, grid: { color: c.grid }, ticks: { color: c.text, callback: function(v) { return v + 'm'; } } }, x: { grid: { display: false }, ticks: { color: c.text } } } } });
-}
-
-function buildMonthlyChart(s) {
-    var bm = sumByMonth(s); var ms = Object.keys(bm).sort();
-    if (ms.length > 12) ms = ms.slice(ms.length - 12);
-    var labels = ms.map(function(m) { var p = m.split('-'); return new Date(p[0], p[1] - 1).toLocaleDateString('en', { month: 'short', year: '2-digit' }); });
-    var data = ms.map(function(m) { return Math.round(bm[m] / 60 * 10) / 10; });
-    if (ms.length === 0) {
-        setChartNote('monthlyNote', 'No monthly data in this view yet.');
-    } else if (ms.length < 3) {
-        setChartNote('monthlyNote', 'Early monthly view. <strong>More logged weeks will make this easier to read.</strong>');
-    } else {
-        setChartNote('monthlyNote', '');
-    }
-    var c = cc(); if (charts.m) charts.m.destroy();
-    charts.m = new Chart(document.getElementById('monthlyChart'), { type: 'bar', data: { labels: labels, datasets: [{ data: data, backgroundColor: c.accent, borderRadius: 6, borderSkipped: false, barPercentage: 0.5 }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
-            scales: { y: { beginAtZero: true, grid: { color: c.grid }, ticks: { color: c.text, callback: function(v) { return v + 'h'; } } }, x: { grid: { display: false }, ticks: { color: c.text, font: { size: 11 } } } } } });
-}
-
-function buildCumulativeChart(s) {
-    var sorted = s.slice().sort(function(a, b) {
-        var left = effectiveSessionDate(a) + ' ' + (a.created_at || '');
-        var right = effectiveSessionDate(b) + ' ' + (b.created_at || '');
-        return left.localeCompare(right);
-    });
-    if (sorted.length === 0) {
-        setChartNote('cumulativeNote', 'No cumulative curve yet.');
-        if (charts.c) charts.c.destroy();
-        return;
-    }
-    var cum = 0; var bd = {}; sorted.forEach(function(x) { var key = effectiveSessionDate(x); bd[key] = (bd[key] || 0) + x.duration; });
-    var dates = Object.keys(bd).sort(); var labels = [], data = [];
-    if (dates.length < 3) {
-        setChartNote('cumulativeNote', 'Early curve. <strong>A few more days will make the trend more meaningful.</strong>');
-    } else {
-        setChartNote('cumulativeNote', '');
-    }
-    dates.forEach(function(d) { cum += bd[d]; labels.push(new Date(d + 'T00:00:00').toLocaleDateString('en', { month: 'short', day: 'numeric' })); data.push(Math.round(cum / 60 * 10) / 10); });
-    var c = cc(); if (charts.c) charts.c.destroy();
-    charts.c = new Chart(document.getElementById('cumulativeChart'), { type: 'line', data: { labels: labels, datasets: [{ data: data, borderColor: c.green, backgroundColor: c.greenLight, borderWidth: 2.5, pointRadius: 3, pointBackgroundColor: c.green, tension: 0.25, fill: true }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
-            scales: { y: { beginAtZero: true, grid: { color: c.grid }, ticks: { color: c.text, callback: function(v) { return v + 'h'; } } }, x: { grid: { display: false }, ticks: { color: c.text, font: { size: 11 }, maxTicksLimit: 12 } } } } });
-    document.getElementById('cumulativeTitle').textContent = currentTag === 'All' ? 'Cumulative Hours' : 'Cumulative — ' + currentTag;
-}
-
-// ---------- FEED ----------
-function updateFeedSummary(count, isScrollable) {
-    var summary = document.getElementById('feedSummary');
-    if (!summary) return;
-    if (count === 0) {
-        summary.textContent = 'No sessions in this view';
-        return;
-    }
-    summary.textContent = count + ' session' + (count === 1 ? '' : 's') + ' in this view' + (isScrollable ? ' • Scroll for older entries' : '');
-}
-
-function buildFeed(s) {
-    var tags = getProjectTags(allSessions);
-    var list = document.getElementById('feedList');
-    if (s.length === 0) {
-        list.innerHTML = '<div class="feed-empty">No sessions logged yet.</div>';
-        updateFeedSummary(0, false);
-        return;
-    }
-    var ordered = s.slice().sort(function(a, b) {
-        var left = effectiveSessionDate(a) + ' ' + (a.created_at || '');
-        var right = effectiveSessionDate(b) + ' ' + (b.created_at || '');
-        return right.localeCompare(left);
-    });
-    var html = '';
-    ordered.forEach(function(x) {
-        var effectiveDate = effectiveSessionDate(x);
-        var effectiveLabel = new Date(effectiveDate + 'T12:00:00').toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' });
-        var loggedLabel = effectiveLabel;
-        var ts = '';
-        if (x.created_at) {
-            var loggedAt = new Date(x.created_at);
-            loggedLabel = loggedAt.toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' });
-            ts = ' at ' + loggedAt.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit', hour12: false });
-        } else if (x.session_date) {
-            loggedLabel = new Date(x.session_date + 'T12:00:00').toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' });
-        }
-        var col = x.tag ? colorForTag(x.tag, tags) : PROJECT_COLORS[0];
-        var tagBadge = x.tag ? '<span class="feed-tag" style="background:' + col + '22;color:' + col + '">' + x.tag + '</span>' : '';
-        var rolloverBadge = '';
-        if (hasRolloverBadge(x, effectiveDate)) {
-            rolloverBadge = '<span class="feed-rollover">Counted toward ' + effectiveLabel + '</span>';
-        }
-        html += '<div class="feed-item"><div class="feed-item-left"><div class="feed-dot" style="background:' + col + '"></div><div><span class="feed-duration">' + x.duration + ' min</span><div class="feed-meta"><span class="feed-time">' + loggedLabel + ts + '</span>' + rolloverBadge + tagBadge + '</div></div></div><div class="feed-actions"><button class="btn btn-danger" onclick="deleteSession(' + x.id + ')">Delete</button></div></div>';
-    });
-    list.innerHTML = html;
-    updateFeedSummary(ordered.length, list.scrollHeight > list.clientHeight);
-}
-
-// ---------- RENDER / REFRESH ----------
-function renderAll(sessions) {
-    var filtered = filterSessions(sessions);
-    updateStats(filtered);
-    buildHeatmap(filtered);
-    buildWeeklyChart(filtered);
-    buildDailyChart(filtered);
-    buildMonthlyChart(filtered);
-    buildCumulativeChart(filtered);
-    buildFeed(filtered);
+    return rows;
 }
 
 async function refreshAll() {
-    allSessions = await loadSessions();
-    buildTabs(allSessions);
-    buildTagDropdown(allSessions);
-    renderAll(allSessions);
+    hideError();
+    var gen = ++state.fetchGen;
+    try {
+        var raw = DEMO ? demoSessions() : await fetchAllSessions();
+        if (gen !== state.fetchGen) return; // a newer refresh started; discard this result
+        var norm = TB.normalize(raw);
+        state.raw = norm.sessions;
+        state.excluded = norm.excluded;
+        state.lastSync = new Date();
+        setSyncStatus(true);
+        renderAll();
+    } catch (e) {
+        if (gen !== state.fetchGen) return; // superseded; let the newer refresh own the UI
+        console.error('Load failed:', e);
+        setSyncStatus(false);
+        // A failed/partial fetch never overwrites a previously complete dataset:
+        // state.raw is only assigned on full success above.
+        showError('Could not load sessions (' + (e && e.message ? e.message : 'network error') + '). Showing last complete data; nothing was changed.');
+        renderAll(); // renders last-known-good or empty state, never fake zeros or a partial history
+    }
 }
 
-// ---------- INIT ----------
-document.getElementById('sessionDate').value = getToday();
-Chart.defaults.font.family = "'DM Sans',system-ui,sans-serif";
-Chart.defaults.color = '#8888a0';
-loadGoal();
-refreshAll();
+function setSyncStatus(ok) {
+    var dot = document.getElementById('syncDot'), text = document.getElementById('syncText');
+    dot.className = 'sync-dot ' + (ok ? 'ok' : 'err');
+    if (DEMO) { text.textContent = 'Demo data — ' + state.raw.length + ' fixture sessions'; return; }
+    text.textContent = ok
+        ? 'Synced ' + state.lastSync.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit', hour12: false }) + ' · ' + state.raw.length + ' sessions'
+        : 'Sync failed — showing nothing rather than stale zeros';
+}
+function showError(msg) { document.getElementById('errorText').textContent = msg; document.getElementById('errorBanner').style.display = 'flex'; }
+function hideError() { document.getElementById('errorBanner').style.display = 'none'; }
+function toast(msg) {
+    var t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    clearTimeout(t._h); t._h = setTimeout(function () { t.classList.remove('show'); }, 2600);
+}
+
+// ---------- goals (localStorage, per project; All = sum) ----------
+function goalKeyFor(tag) { return 'weeklyGoal_' + tag; }
+function getGoalMinsFor(tag) { var v = localStorage.getItem(goalKeyFor(tag)); return v ? parseFloat(v) : 0; }
+function getGoalMinutes() {
+    if (state.tag === 'All') {
+        var total = 0;
+        projectTags().forEach(function (t) { total += getGoalMinsFor(t); });
+        return total;
+    }
+    return getGoalMinsFor(state.tag);
+}
+function loadGoalEditor() {
+    var edit = document.getElementById('goalEditWrap');
+    var note = document.getElementById('goalEditNote');
+    if (state.tag === 'All') { edit.style.display = 'none'; note.style.display = 'inline'; return; }
+    edit.style.display = 'flex'; note.style.display = 'none';
+    var total = getGoalMinsFor(state.tag);
+    document.getElementById('goalHrs').value = Math.floor(total / 60);
+    document.getElementById('goalMins').value = Math.round(total % 60);
+}
+function onGoalEdited() {
+    var h = parseInt(document.getElementById('goalHrs').value) || 0;
+    var m = parseInt(document.getElementById('goalMins').value) || 0;
+    localStorage.setItem(goalKeyFor(state.tag), h * 60 + m);
+    renderAll();
+}
+
+// ---------- tags ----------
+function projectTags() {
+    var seen = {}, tags = [];
+    state.raw.forEach(function (s) { if (!seen[s.tag]) { seen[s.tag] = true; tags.push(s.tag); } });
+    tags.sort();
+    return tags.length ? tags : ['Studying'];
+}
+function colorForTag(tag) {
+    var idx = projectTags().indexOf(tag);
+    return idx >= 0 ? PROJECT_COLORS[idx % PROJECT_COLORS.length] : PROJECT_COLORS[0];
+}
+function buildTabs() {
+    var bar = document.getElementById('tabBar');
+    bar.innerHTML = '';
+    ['All'].concat(projectTags()).forEach(function (label) {
+        var el = document.createElement('button');
+        el.className = 'tab' + (label === state.tag ? ' active' : '');
+        el.textContent = label;
+        el.setAttribute('role', 'tab');
+        el.setAttribute('aria-selected', label === state.tag ? 'true' : 'false');
+        if (label === state.tag && label !== 'All') el.style.background = colorForTag(label);
+        el.onclick = function () { state.tag = label; state.selectedDay = null; state.feedLimit = 100; loadGoalEditor(); renderAll(); };
+        bar.appendChild(el);
+    });
+}
+function buildTagDropdown() {
+    var sel = document.getElementById('sessionTag');
+    sel.innerHTML = projectTags().map(function (t) { return '<option value="' + escapeHtml(t) + '">' + escapeHtml(t) + '</option>'; }).join('');
+    if (state.tag !== 'All' && projectTags().indexOf(state.tag) >= 0) sel.value = state.tag;
+}
+function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+// ---------- write paths (user-initiated only) ----------
+function resolveManualSessionDate(v) {
+    if (!v) return '';
+    return v === TB.calendarToday(new Date()) ? TB.logicalToday(new Date()) : v;
+}
+async function addSession() {
+    if (DEMO) { toast('Demo mode: writes are disabled'); return; }
+    var raw = document.getElementById('sessionDate').value;
+    var d = resolveManualSessionDate(raw);
+    var m = parseInt(document.getElementById('sessionMinutes').value);
+    var tag = document.getElementById('sessionTag').value || 'Studying';
+    if (!d || !m || m < 1) return;
+    if (d !== raw) document.getElementById('sessionDate').value = d;
+    var btn = document.getElementById('addBtn');
+    btn.disabled = true;
+    try {
+        var r = await supaFetch('sessions', { method: 'POST', prefer: 'return=representation', body: { session_date: d, duration: m, tag: tag } });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        toast('Logged ' + m + ' min · ' + tag);
+        await refreshAll();
+    } catch (e) { toast('Failed to save — nothing was changed'); console.error(e); }
+    btn.disabled = false;
+}
+function quickAdd(mins) {
+    document.getElementById('sessionMinutes').value = mins;
+    if (!document.getElementById('sessionDate').value) document.getElementById('sessionDate').value = TB.logicalToday(new Date());
+    addSession();
+}
+async function deleteSession(id, label) {
+    if (DEMO) { toast('Demo mode: writes are disabled'); return; }
+    if (!confirm('Delete this session (' + label + ')? This cannot be undone.')) return;
+    try {
+        var r = await supaFetch('sessions?id=eq.' + id, { method: 'DELETE' });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        toast('Session deleted');
+        await refreshAll();
+    } catch (e) { toast('Delete failed — nothing was changed'); console.error(e); }
+}
+function exportCsv() {
+    var a = state.analytics;
+    if (!a || !a.sessions.length) { toast('Nothing to export in this view'); return; }
+    var csv = TB.buildCsv(a.sessions);
+    var name = TB.csvFilename(a.sessions, state.tag, a.today);
+    var blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var link = document.createElement('a');
+    link.href = url; link.download = name;
+    document.body.appendChild(link); link.click(); document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast('Exported ' + a.sessions.length + ' sessions (' + (state.tag === 'All' ? 'all categories' : state.tag) + ')');
+}
+
+// ---------- rendering ----------
+function renderAll() {
+    var a = TB.computeAnalytics(state.raw, state.tag, getGoalMinutes(), new Date());
+    state.analytics = a;
+    buildTabs();
+    buildTagDropdown();
+    renderHero(a);
+    renderStatStrip(a);
+    renderGoal(a);
+    renderTrend(a);
+    renderHeatmap(a);
+    renderDayPanel(a);
+    renderCategories(a);
+    renderSessions28(a);
+    renderWeekdayRhythm(a);
+    renderTimeOfDay(a);
+    renderConsistency(a);
+    renderRecords(a);
+    renderMilestones(a);
+    renderCumulative(a);
+    renderFeed(a);
+    renderFooter(a);
+}
+
+function deltaChip(min, title) {
+    if (min === 0) return '<span class="chip neutral" title="' + title + '">±0</span>';
+    var cls = min > 0 ? 'pos' : 'neg';
+    return '<span class="chip ' + cls + '" title="' + title + '">' + TB.fmtSigned(min) + '</span>';
+}
+
+function renderHero(a) {
+    document.getElementById('heroToday').innerHTML = TB.fmtHM(a.todayMin);
+    var streakTip = 'Consecutive days with at least one logged session, counting up to today (or through yesterday if today has none yet). Any session length counts equally.';
+    document.getElementById('heroTodaySub').innerHTML =
+        a.todaySessions + ' session' + (a.todaySessions === 1 ? '' : 's') + ' today' +
+        (a.consistency.streak > 0 ? ' · <span class="chip warn" title="' + streakTip + '">' + a.consistency.streak + '-day streak</span>' : '');
+
+    document.getElementById('heroWeek').innerHTML = TB.fmtH1(a.week.minutes).replace('h', '<span class="unit">h</span>');
+    // Disclosure: today is still in progress; last week's same weekday is complete.
+    var deltaTip = 'This week Mon–today (today still in progress) vs the same weekdays last week (complete days). Not a like-for-like time-of-day comparison.';
+    document.getElementById('heroWeekSub').innerHTML =
+        deltaChip(a.week.deltaVsLastWeekSameDays, deltaTip) +
+        '<span title="' + deltaTip + '">vs same days last week (' + TB.fmtHM(a.week.lastWeekSameDays) + ')</span>';
+
+    var spark = document.getElementById('weekSpark');
+    var max = Math.max.apply(null, a.week.days.map(function (d) { return d.minutes; }).concat([1]));
+    spark.innerHTML = a.week.days.map(function (d) {
+        var h = d.minutes > 0 ? Math.max(8, Math.round(d.minutes / max * 100)) : 0;
+        return '<div class="sbar' + (d.isToday ? ' today' : '') + '" title="' + TB.fmtDayShort(d.day) + ': ' + TB.fmtHM(d.minutes) + '"><div class="fill" style="height:' + h + '%"></div></div>';
+    }).join('');
+
+    var g = a.week;
+    if (g.goalMinutes > 0) {
+        document.getElementById('heroGoal').innerHTML = Math.round(g.pct * 100) + '<span class="unit">%</span>';
+        var status = g.aheadMin >= 0
+            ? '<span class="chip pos">' + TB.fmtSigned(g.aheadMin) + ' vs pace</span>'
+            : '<span class="chip neg">' + TB.fmtSigned(g.aheadMin) + ' vs pace</span>';
+        document.getElementById('heroGoalSub').innerHTML = status + '<span>of ' + TB.fmtHM(g.goalMinutes) + '</span>';
+    } else {
+        document.getElementById('heroGoal').textContent = '—';
+        document.getElementById('heroGoalSub').innerHTML = '<span>No goal set' + (state.tag === 'All' ? ' — set per-project goals below' : ' — set one under Weekly goal') + '</span>';
+    }
+}
+
+function renderStatStrip(a) {
+    var items = [
+        [TB.fmtH1(a.totalMin), 'all time'],
+        [a.rolling.active7 + '/7', 'active days, 7d'],
+        [a.rolling.active28 + '/28', 'active days, 28d'],
+        [TB.fmtHM(Math.round(a.avgPerActiveDay)), 'avg / active day'],
+        [TB.fmtHM(a.sessions28.medianDur), 'median session, 28d'],
+        [a.totalSessions, 'sessions']
+    ];
+    document.getElementById('statStrip').innerHTML = items.map(function (it) {
+        return '<div class="s-item"><span class="s-val">' + it[0] + '</span><span class="s-lab">' + it[1] + '</span></div>';
+    }).join('');
+}
+
+function renderGoal(a) {
+    var g = a.week, el = document.getElementById('goalBody');
+    if (g.goalMinutes <= 0) {
+        el.innerHTML = '<div class="day-empty">No weekly goal set' + (state.tag === 'All'
+            ? '. Pick a project tab and set its goal — the All view sums per-project goals.'
+            : '. Set one in the header of this card.') + '</div>';
+        document.getElementById('goalHistory').innerHTML = '';
+        document.getElementById('goalFoot').textContent = '';
+        return;
+    }
+    var pctFill = Math.min(100, g.pct * 100);
+    var pacePos = Math.min(100, g.elapsedFrac * 100);
+    var aheadTxt = g.aheadMin >= 0
+        ? 'You are <b>' + TB.fmtHM(g.aheadMin) + '</b> ahead of pace.'
+        : 'You are <b>' + TB.fmtHM(-g.aheadMin) + '</b> behind pace.';
+    var needTxt = g.remainingToGoal <= 0
+        ? 'Goal reached — everything further is surplus.'
+        : 'Need <b>' + TB.fmtHM(Math.round(g.requiredPerDay)) + '</b>/day for the remaining ' + (Math.round(g.remainingDays * 10) / 10) + ' days.';
+    el.innerHTML =
+        '<div class="goal-now"><span class="g-big">' + TB.fmtHM(g.minutes) + '</span><span class="g-of">of ' + TB.fmtHM(g.goalMinutes) + ' (' + Math.round(g.pct * 100) + '%)</span></div>' +
+        '<div class="goal-track" role="img" aria-label="Weekly goal progress: ' + Math.round(g.pct * 100) + ' percent; pace marker at ' + Math.round(g.elapsedFrac * 100) + ' percent of the week">' +
+            '<div class="goal-fill' + (g.pct >= 1 ? ' over' : '') + '" style="width:' + pctFill + '%"></div>' +
+            '<div class="pace-marker" style="left:' + pacePos + '%" title="Where you would be at goal pace (' + Math.round(g.elapsedFrac * 100) + '% of the week elapsed)"></div>' +
+        '</div>' +
+        '<div class="goal-scale"><span>Mon</span><span>goal: ' + TB.fmtHM(g.goalMinutes) + '</span><span>Sun</span></div>' +
+        '<div class="goal-facts">' +
+            '<span>' + aheadTxt + '</span>' +
+            '<span>' + needTxt + '</span>' +
+            '<span>Projected ≈ <b>' + TB.fmtHM(Math.round(g.projected)) + '</b></span>' +
+        '</div>';
+
+    // last 4 complete weeks
+    var hist = document.getElementById('goalHistory');
+    var rows = a.prevWeeks.slice(0, 4);
+    var maxW = Math.max(g.goalMinutes, Math.max.apply(null, rows.map(function (r) { return r.minutes; }).concat([1])));
+    hist.innerHTML = rows.map(function (r) {
+        var w = Math.min(100, r.minutes / maxW * 100);
+        var goalPos = Math.min(100, g.goalMinutes / maxW * 100);
+        var hit = r.minutes >= g.goalMinutes;
+        var lab = TB.fmtDayShort(r.weekStart) + ' – ' + TB.fmtDayShort(TB.addDays(r.weekStart, 6));
+        return '<div class="gh-row"><span class="gh-label">' + lab + '</span>' +
+            '<div class="gh-track"><div class="gh-fill' + (hit ? ' hit' : '') + '" style="width:' + w + '%"></div><div class="gh-goalmark" style="left:' + goalPos + '%"></div></div>' +
+            '<span class="gh-val">' + TB.fmtHM(r.minutes) + ' · ' + Math.round(r.minutes / g.goalMinutes * 100) + '%</span></div>';
+    }).join('');
+
+    document.getElementById('goalFoot').textContent =
+        (a.goalHitTotal > 0 ? 'Goal hit in ' + a.goalHitCount + ' of the last ' + a.goalHitTotal + ' complete weeks. ' : '') +
+        'Pace = goal × elapsed fraction of the week. Projection = current total + your 28-day daily average for the remaining days. Past-week % uses the current goal value.';
+}
+
+var trendChart = null;
+function renderTrend(a) {
+    var range = state.trendRange;
+    var series = range === '28d' ? TB.dailySeries(a, 28) : TB.weeklySeries(a, range === '8w' ? 8 : 26);
+    var isDaily = range === '28d';
+    var labels = series.points.map(function (p) { return TB.fmtDayShort(p.key); });
+    var values = series.points.map(function (p) { return isDaily ? p.minutes : Math.round(p.minutes / 6) / 10; });
+    var rolling = series.rolling.map(function (v) { return v === null ? null : (isDaily ? v : Math.round(v / 6) / 10); });
+    var barColors = series.points.map(function (p) {
+        if (isDaily) return p.isToday ? '#00b894' : '#6c5ce7';
+        return p.isCurrent ? 'rgba(108,92,231,0.35)' : '#6c5ce7';
+    });
+    if (trendChart) trendChart.destroy();
+    trendChart = new Chart(document.getElementById('trendChart'), {
+        data: {
+            labels: labels,
+            datasets: [
+                { type: 'bar', data: values, backgroundColor: barColors, borderRadius: 4, borderSkipped: false, barPercentage: 0.7, order: 2 },
+                { type: 'line', data: rolling, borderColor: '#fdcb6e', borderWidth: 2, pointRadius: 0, tension: 0.3, spanGaps: false, order: 1 }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false, animation: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: { callbacks: { label: function (ctx) {
+                    if (ctx.datasetIndex === 1) return series.rollingLabel + ': ' + (isDaily ? TB.fmtHM(ctx.parsed.y) : ctx.parsed.y + 'h');
+                    return isDaily ? TB.fmtHM(ctx.parsed.y) : ctx.parsed.y + 'h';
+                } } }
+            },
+            scales: {
+                y: { beginAtZero: true, grid: { color: 'rgba(42,42,58,0.6)' }, ticks: { color: '#9494ac', callback: function (v) { return isDaily ? v + 'm' : v + 'h'; } } },
+                x: { grid: { display: false }, ticks: { color: '#9494ac', font: { size: 10.5 }, maxTicksLimit: isDaily ? 14 : 13 } }
+            }
+        }
+    });
+    var totalWin = series.points.reduce(function (s, p) { return s + p.minutes; }, 0);
+    document.getElementById('trendFoot').innerHTML = (isDaily
+        ? 'Bars: completed minutes per logical day (last 28 days incl. today, green = today). Amber line: 7-day rolling average, zero days included.'
+        : 'Bars: completed hours per week (Mon–Sun). The current partial week is dimmed. Amber line: 4-week rolling average.') +
+        ' Window total: <b>' + TB.fmtH1(totalWin) + '</b>.';
+    document.getElementById('trendSummary').textContent =
+        'Completed time trend, ' + range + '. Window total ' + TB.fmtHM(totalWin) + '. ' +
+        (isDaily ? 'Today: ' + TB.fmtHM(a.todayMin) + '.' : 'Current week so far: ' + TB.fmtHM(a.week.minutes) + '.');
+}
+
+function heatLevel(min) { return min <= 0 ? 0 : min < 60 ? 1 : min < 180 ? 2 : min < 360 ? 3 : 4; }
+
+// Roving-tabindex model for the heatmap: hmCells[w][r] holds the interactive
+// cell button (or null for future/empty positions). Only one cell is in the
+// tab order at a time; arrow keys move focus. This keeps a 52×7 grid to a
+// single tab stop instead of ~364.
+var hmCells = [];
+var hmWantFocusDay = null; // set when a keyboard action re-renders and focus must follow
+
+function hmMove(w, r, dw, dr) {
+    var nw = w, nr = r;
+    while (true) {
+        nw += dw; nr += dr;
+        if (nw < 0 || nw >= hmCells.length || nr < 0 || nr > 6) return null;
+        var c = (hmCells[nw] || [])[nr];
+        if (c) return c; // skip over gaps (future/empty) in the same direction
+    }
+}
+function hmSetRoving(cell) {
+    for (var w = 0; w < hmCells.length; w++) {
+        var col = hmCells[w]; if (!col) continue;
+        for (var r = 0; r < col.length; r++) { if (col[r]) col[r].tabIndex = (col[r] === cell) ? 0 : -1; }
+    }
+}
+function hmOnKeyDown(e) {
+    var btn = e.target;
+    if (!btn || btn.dataset == null || btn.dataset.w === undefined) return;
+    var w = +btn.dataset.w, r = +btn.dataset.r, next = null;
+    if (e.key === 'ArrowRight') next = hmMove(w, r, 1, 0);
+    else if (e.key === 'ArrowLeft') next = hmMove(w, r, -1, 0);
+    else if (e.key === 'ArrowDown') next = hmMove(w, r, 0, 1);
+    else if (e.key === 'ArrowUp') next = hmMove(w, r, 0, -1);
+    else return;
+    e.preventDefault();
+    if (next) { hmSetRoving(next); next.focus(); }
+}
+
+function renderHeatmap(a) {
+    var weeks = state.hmWeeks;
+    var grid = document.getElementById('hmGrid'), months = document.getElementById('hmMonths');
+    grid.innerHTML = ''; months.innerHTML = '';
+    grid.setAttribute('role', 'grid');
+    grid.setAttribute('aria-label', 'Daily activity, last ' + weeks + ' weeks. Use arrow keys to move between days, Enter to inspect a day.');
+    grid.onkeydown = hmOnKeyDown;
+    hmCells = [];
+    var start = TB.addDays(a.weekStart, -7 * (weeks - 1));
+    var colW = 16; // 13px cell + 3px gap
+    var lastMonth = '', lastLabelCol = -3;
+    var rovingCell = null, todayCell = null, selectedCell = null, lastInteractive = null, wantFocusCell = null;
+    for (var w = 0; w < weeks; w++) {
+        var colStart = TB.addDays(start, w * 7);
+        var m = TB.parseDay(colStart).toLocaleDateString('en', { month: 'short' });
+        if (m !== lastMonth && w - lastLabelCol >= 3) {
+            var lab = document.createElement('span');
+            lab.className = 'hm-month-label';
+            lab.style.left = (w * colW) + 'px';
+            lab.textContent = m;
+            months.appendChild(lab);
+            lastLabelCol = w;
+        }
+        if (m !== lastMonth) { lastMonth = m; }
+        var col = document.createElement('div');
+        col.className = 'hm-col';
+        hmCells[w] = [];
+        for (var r = 0; r < 7; r++) {
+            var day = TB.addDays(colStart, r);
+            var cell;
+            if (day > a.today) {
+                cell = document.createElement('div');
+                cell.className = 'hm-cell future';
+                cell.setAttribute('aria-hidden', 'true');
+                hmCells[w][r] = null;
+            } else {
+                var minv = a.byDay[day] || 0;
+                cell = document.createElement('button');
+                cell.type = 'button';
+                cell.tabIndex = -1;
+                cell.dataset.w = w; cell.dataset.r = r;
+                cell.className = 'hm-cell l' + heatLevel(minv);
+                if (heatLevel(minv) === 0) cell.className = 'hm-cell';
+                if (day === a.today) { cell.className += ' today'; todayCell = cell; }
+                if (day === state.selectedDay) { cell.className += ' selected'; selectedCell = cell; }
+                var sc = (a.sessionsByDay[day] || []).length;
+                cell.title = TB.fmtDayLong(day) + ' (wk ' + TB.isoWeek(day) + '): ' + TB.fmtHM(minv) + (sc ? ' · ' + sc + ' session' + (sc === 1 ? '' : 's') : '');
+                cell.setAttribute('aria-label', cell.title);
+                (function (d2) {
+                    cell.onclick = function () { hmWantFocusDay = d2; selectDay(d2); };
+                })(day);
+                if (day === hmWantFocusDay) wantFocusCell = cell;
+                hmCells[w][r] = cell;
+                lastInteractive = cell;
+            }
+            col.appendChild(cell);
+        }
+        grid.appendChild(col);
+    }
+    // One tab stop: prefer selected, then today, then the most recent day.
+    rovingCell = selectedCell || todayCell || lastInteractive;
+    if (rovingCell) rovingCell.tabIndex = 0;
+    if (wantFocusCell) { hmSetRoving(wantFocusCell); wantFocusCell.focus(); }
+    hmWantFocusDay = null;
+    document.getElementById('hmTitle').textContent = (state.tag === 'All' ? 'Activity' : state.tag) + ' — last ' + weeks + ' weeks';
+    document.getElementById('hmLegend').innerHTML =
+        '<span>0</span><div class="hm-cell"></div><div class="hm-cell l1"></div><div class="hm-cell l2"></div><div class="hm-cell l3"></div><div class="hm-cell l4"></div>' +
+        '<span>&lt;1h · 1–3h · 3–6h · ≥6h</span><span style="margin-left:12px">▢ dashed = future · green ring = today</span>';
+    var activeInRange = 0, minsInRange = 0;
+    for (var d3 = start; d3 <= a.today; d3 = TB.addDays(d3, 1)) { var mv = a.byDay[d3] || 0; if (mv > 0) { activeInRange++; minsInRange += mv; } }
+    document.getElementById('hmSummary').textContent = 'Activity heatmap, last ' + weeks + ' weeks: ' + activeInRange + ' active days totaling ' + TB.fmtHM(minsInRange) + '.';
+    // scroll to the right (most recent)
+    var sc2 = document.querySelector('.hm-scroll');
+    if (sc2) sc2.scrollLeft = sc2.scrollWidth;
+}
+
+function selectDay(day) {
+    state.selectedDay = state.selectedDay === day ? null : day;
+    state.feedLimit = 100;
+    renderHeatmap(state.analytics);
+    renderDayPanel(state.analytics);
+    renderFeed(state.analytics);
+}
+
+function renderDayPanel(a) {
+    var el = document.getElementById('dayPanel');
+    var day = state.selectedDay || a.today;
+    var list = (a.sessionsByDay[day] || []);
+    var total = a.byDay[day] || 0;
+    // typical value for this weekday: median over the heatmap window
+    var samples = [];
+    for (var w = 1; w <= 12; w++) {
+        var d = TB.addDays(day, -7 * w);
+        if (a.firstDay && d >= a.firstDay) samples.push(a.byDay[d] || 0);
+    }
+    var typical = samples.length >= 4 ? TB.median(samples) : null;
+    var weekdayName = TB.parseDay(day).toLocaleDateString('en', { weekday: 'long' });
+
+    var html = '<div class="day-panel-date">' + TB.fmtDayLong(day) + (day === a.today ? ' <span class="chip pos">today</span>' : '') + '</div>' +
+        '<div class="day-panel-total">' + TB.fmtHM(total) + '</div>' +
+        '<div class="day-panel-sub">' + list.length + ' session' + (list.length === 1 ? '' : 's') +
+        (typical !== null ? ' · your median ' + weekdayName + ' (12w): ' + TB.fmtHM(typical) : '') + '</div>';
+
+    if (!list.length) {
+        html += '<div class="day-empty">No completed sessions on this day.</div>';
+    } else {
+        var byTag = {};
+        list.forEach(function (s) { byTag[s.tag] = (byTag[s.tag] || 0) + s.duration; });
+        var maxV = Math.max.apply(null, Object.keys(byTag).map(function (t) { return byTag[t]; }));
+        html += Object.keys(byTag).sort(function (x, y) { return byTag[y] - byTag[x]; }).map(function (t) {
+            var c = colorForTag(t);
+            return '<div class="day-cat"><span class="dc-dot" style="background:' + c + '"></span>' +
+                '<span class="dc-name">' + escapeHtml(t) + '</span>' +
+                '<div class="dc-track"><div class="dc-fill" style="width:' + Math.round(byTag[t] / maxV * 100) + '%;background:' + c + '"></div></div>' +
+                '<span class="dc-val">' + TB.fmtHM(byTag[t]) + '</span></div>';
+        }).join('');
+    }
+    el.innerHTML = html;
+}
+
+function renderCategories(a) {
+    var el = document.getElementById('catList'), alloc = document.getElementById('allocBar');
+    el.innerHTML = ''; alloc.innerHTML = '';
+    var list = a.categories;
+    if (!list || !list.length) {
+        el.innerHTML = '<div class="day-empty">No sessions in the last 28 days.</div>';
+        document.getElementById('catNote').textContent = '';
+        document.getElementById('catSummary').textContent = 'No category data in the last 28 days.';
+        return;
+    }
+    var totalMin = list.reduce(function (s, c) { return s + c.minutes; }, 0);
+    alloc.innerHTML = list.map(function (c) {
+        return '<div style="width:' + (c.share * 100) + '%;background:' + colorForTag(c.tag) + '" title="' + escapeHtml(c.tag) + ' ' + Math.round(c.share * 100) + '%"></div>';
+    }).join('');
+    var maxMin = list[0].minutes;
+    el.innerHTML = list.map(function (c) {
+        var col = colorForTag(c.tag);
+        var delta = c.deltaShare === null ? '<span class="cat-delta" style="color:var(--text-faint)">new</span>'
+            : '<span class="cat-delta" style="color:' + (c.deltaShare >= 0 ? 'var(--pos)' : 'var(--neg)') + '">' + (c.deltaShare >= 0 ? '+' : '−') + Math.abs(Math.round(c.deltaShare * 100)) + 'pp</span>';
+        return '<div class="cat-row"><span class="cat-dot" style="background:' + col + '"></span>' +
+            '<span class="cat-name" title="' + escapeHtml(c.tag) + '">' + escapeHtml(c.tag) + '</span>' +
+            '<div class="cat-track"><div class="cat-fill" style="width:' + Math.max(3, Math.round(c.minutes / maxMin * 100)) + '%;background:' + col + '"></div></div>' +
+            '<span class="cat-val">' + TB.fmtHM(c.minutes) + '</span>' +
+            '<span class="cat-share">' + Math.round(c.share * 100) + '%</span>' + delta + '</div>';
+    }).join('');
+    document.getElementById('catNote').textContent = 'share change vs previous 28 days, in percentage points';
+    document.getElementById('catSummary').textContent = 'Category allocation over the last 28 days: ' +
+        list.map(function (c) { return c.tag + ' ' + TB.fmtHM(c.minutes) + ' (' + Math.round(c.share * 100) + '%)'; }).join(', ') + '. Total ' + TB.fmtHM(totalMin) + '.';
+}
+
+function renderSessions28(a) {
+    var s = a.sessions28;
+    document.getElementById('sessNote').textContent = s.count + ' sessions';
+    document.getElementById('sessStats').innerHTML =
+        '<table class="mini-table">' +
+        '<tr><td>Median session</td><td class="v">' + TB.fmtHM(s.medianDur) + '</td></tr>' +
+        '<tr><td>Mean session</td><td class="v">' + TB.fmtHM(s.meanDur) + '</td></tr>' +
+        '<tr><td>Sessions per active day</td><td class="v">' + (Math.round(s.perActiveDay * 10) / 10) + '</td></tr>' +
+        '<tr><td>Longest session (all time)</td><td class="v">' + TB.fmtHM(a.records.longestSession.minutes) + '</td></tr>' +
+        '</table>';
+    var maxB = Math.max.apply(null, s.histBins.map(function (b) { return b.minutes; }).concat([1]));
+    document.getElementById('durHist').innerHTML = s.histBins.map(function (b) {
+        return '<div class="dist-row"><span class="dist-label">' + b.label + '</span>' +
+            '<div class="dist-track"><div class="dist-fill" style="width:' + Math.round(b.minutes / maxB * 100) + '%"></div></div>' +
+            '<span class="dist-val">' + (b.count ? b.count + '× · ' + TB.fmtH1(b.minutes) : '—') + '</span></div>';
+    }).join('');
+    document.getElementById('focusLine').innerHTML =
+        'Focus depth: <b>' + Math.round(s.focusShare * 100) + '%</b> — share of completed time in sessions of 45 minutes or longer (last 28 days).';
+}
+
+function renderWeekdayRhythm(a) {
+    var names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    var maxV = Math.max.apply(null, a.weekdayAvg.concat([1]));
+    document.getElementById('weekdayDist').innerHTML = a.weekdayAvg.map(function (v, i) {
+        return '<div class="dist-row"><span class="dist-label">' + names[i] + '</span>' +
+            '<div class="dist-track"><div class="dist-fill" style="width:' + Math.round(v / maxV * 100) + '%"></div></div>' +
+            '<span class="dist-val">' + TB.fmtHM(Math.round(v)) + '</span></div>';
+    }).join('');
+}
+
+function renderTimeOfDay(a) {
+    var t = a.tod;
+    document.getElementById('todNote').textContent = t.known < t.of ? 'from ' + t.known + ' of ' + t.of + ' sessions with a logged time' : 'last 28 days';
+    if (!t.known) {
+        document.getElementById('todDist').innerHTML = '<div class="day-empty">No sessions with a logged start time in the last 28 days.</div>';
+        return;
+    }
+    var maxV = Math.max.apply(null, t.minutes.concat([1]));
+    document.getElementById('todDist').innerHTML = t.buckets.map(function (b, i) {
+        return '<div class="dist-row"><span class="dist-label">' + b.label + '</span>' +
+            '<div class="dist-track"><div class="dist-fill" style="width:' + Math.round(t.minutes[i] / maxV * 100) + '%"></div></div>' +
+            '<span class="dist-val">' + (t.minutes[i] ? TB.fmtHM(t.minutes[i]) : '—') + '</span></div>';
+    }).join('');
+}
+
+function renderConsistency(a) {
+    var c = a.consistency;
+    document.getElementById('consistencyBody').innerHTML =
+        '<table class="mini-table">' +
+        '<tr title="Consecutive days with ≥1 session up to today (or through yesterday if today is empty). Any session length counts."><td>Current streak</td><td class="v">' + c.streak + ' day' + (c.streak === 1 ? '' : 's') + '</td></tr>' +
+        '<tr><td>Best streak</td><td class="v">' + c.bestStreak + ' days</td></tr>' +
+        '<tr><td>Active days (last 7)</td><td class="v">' + a.rolling.active7 + '/7</td></tr>' +
+        '<tr><td>Active days (last 28)</td><td class="v">' + a.rolling.active28 + '/28</td></tr>' +
+        '<tr><td>Days ≥ 25 min (last 28)</td><td class="v">' + a.rolling.thresholdDays28 + '/28</td></tr>' +
+        '<tr><td>Longest gap (last 28)</td><td class="v">' + c.longestGap28 + ' day' + (c.longestGap28 === 1 ? '' : 's') + '</td></tr>' +
+        '</table>';
+}
+
+function renderRecords(a) {
+    var r = a.records;
+    function recent(day) { return day && TB.dayDiff(day, a.today) <= 28 ? ' <span class="chip pos" style="font-size:10px;padding:2px 7px">recent</span>' : ''; }
+    document.getElementById('recGrid').innerHTML =
+        '<div class="rec-item"><div class="rec-val">' + (r.bestDay.minutes ? TB.fmtHM(r.bestDay.minutes) : '—') + '</div><div class="rec-lab">Best day</div><div class="rec-det">' + (r.bestDay.day ? TB.parseDay(r.bestDay.day).toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' }) + recent(r.bestDay.day) : '') + '</div></div>' +
+        '<div class="rec-item"><div class="rec-val">' + (r.bestWeek.minutes ? TB.fmtH1(r.bestWeek.minutes) : '—') + '</div><div class="rec-lab">Best week</div><div class="rec-det">' + (r.bestWeek.weekStart ? 'week of ' + TB.fmtDayShort(r.bestWeek.weekStart) + recent(r.bestWeek.weekStart) : '') + '</div></div>' +
+        '<div class="rec-item"><div class="rec-val">' + a.consistency.bestStreak + '</div><div class="rec-lab">Best streak</div><div class="rec-det">consecutive active days</div></div>' +
+        '<div class="rec-item"><div class="rec-val">' + (r.longestSession.minutes ? TB.fmtHM(r.longestSession.minutes) : '—') + '</div><div class="rec-lab">Longest session</div><div class="rec-det">' + (r.longestSession.day ? TB.fmtDayShort(r.longestSession.day) : '') + '</div></div>';
+}
+
+function renderMilestones(a) {
+    var totalH = a.totalMin / 60;
+    var defs = [
+        { label: 'sessions', value: a.totalSessions, steps: [100, 250, 500, 1000, 2500] },
+        { label: 'hours', value: totalH, steps: [100, 250, 500, 1000, 2500] },
+        { label: 'active days', value: a.activeDays.length, steps: [50, 100, 250, 500] }
+    ];
+    document.getElementById('milestones').innerHTML = defs.map(function (d) {
+        var passed = d.steps.filter(function (s) { return d.value >= s; });
+        var next = d.steps.find(function (s) { return d.value < s; });
+        var line = passed.length ? '<b>' + passed[passed.length - 1] + ' ' + d.label + '</b> reached (now ' + (Math.round(d.value * 10) / 10) + ')' : '';
+        if (next) line += (line ? ' · ' : '') + 'next: <b>' + next + ' ' + d.label + '</b> (' + Math.round(d.value / next * 100) + '%)';
+        return '<div>' + line + '</div>';
+    }).join('');
+}
+
+var cumChart = null;
+function renderCumulative(a) {
+    var series = TB.cumulativeSeries(a);
+    var note = document.getElementById('cumNote');
+    if (cumChart) { cumChart.destroy(); cumChart = null; }
+    if (series.length < 2) { note.textContent = 'Not enough history yet.'; return; }
+    note.textContent = 'calendar-uniform axis · ' + (state.tag === 'All' ? 'all categories' : state.tag);
+    var labels = series.map(function (p) { return TB.fmtDayShort(p.key); });
+    cumChart = new Chart(document.getElementById('cumChart'), {
+        type: 'line',
+        data: { labels: labels, datasets: [{ data: series.map(function (p) { return Math.round(p.hours * 10) / 10; }), borderColor: '#00b894', backgroundColor: 'rgba(0,184,148,0.15)', borderWidth: 2, pointRadius: 0, tension: 0.15, fill: true }] },
+        options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true, grid: { color: 'rgba(42,42,58,0.6)' }, ticks: { color: '#9494ac', callback: function (v) { return v + 'h'; } } },
+                x: { grid: { display: false }, ticks: { color: '#9494ac', font: { size: 10.5 }, maxTicksLimit: 14 } } } }
+    });
+}
+
+function renderFeed(a) {
+    var list = document.getElementById('feedList');
+    var chip = document.getElementById('dayFilterChip');
+    var items = a.sessions.slice();
+    if (state.selectedDay) {
+        items = items.filter(function (s) { return s.day === state.selectedDay; });
+        chip.style.display = 'inline-flex';
+        chip.innerHTML = TB.fmtDayShort(state.selectedDay) + ' only &nbsp;✕';
+        chip.style.cursor = 'pointer';
+        chip.onclick = function () { selectDay(state.selectedDay); };
+    } else {
+        chip.style.display = 'none';
+    }
+    items.sort(function (x, y) {
+        var l = x.day + ' ' + (x.created_at || ''), r2 = y.day + ' ' + (y.created_at || '');
+        return r2.localeCompare(l);
+    });
+    var total = items.length;
+    var shown = items.slice(0, state.feedLimit);
+    if (!shown.length) {
+        list.innerHTML = '<div class="feed-empty">' + (state.selectedDay ? 'No sessions on this day.' : 'No sessions in this view.') + '</div>';
+    } else {
+        list.innerHTML = shown.map(function (x) {
+            var col = colorForTag(x.tag);
+            var effLabel = TB.parseDay(x.day).toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' });
+            var when = effLabel, ts = '';
+            if (x.created_at) {
+                var lg = new Date(x.created_at);
+                if (!isNaN(lg.getTime())) { // a malformed timestamp falls back to the logical-day label, never "Invalid Date"
+                    when = lg.toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' });
+                    ts = ' at ' + lg.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit', hour12: false });
+                }
+            }
+            var roll = x.rollover ? '<span class="feed-rollover">Counted toward ' + effLabel + '</span>' : '';
+            var tagB = '<span class="feed-tag" style="background:' + col + '22;color:' + col + '">' + escapeHtml(x.tag) + '</span>';
+            return '<div class="feed-item"><div class="feed-left"><span class="feed-dot" style="background:' + col + '"></span><div>' +
+                '<span class="feed-duration">' + x.duration + ' min</span>' +
+                '<div class="feed-meta"><span class="feed-time">' + when + ts + '</span>' + roll + tagB + '</div></div></div>' +
+                '<button class="btn-danger" aria-label="Delete session ' + x.id + '" onclick="deleteSession(' + x.id + ', \'' + x.duration + ' min · ' + escapeHtml(x.tag).replace(/'/g, '') + '\')">Delete</button></div>';
+        }).join('');
+    }
+    document.getElementById('feedSummary').textContent = total + ' session' + (total === 1 ? '' : 's') + (shown.length < total ? ' · showing latest ' + shown.length : '');
+    document.getElementById('showMoreBtn').style.display = shown.length < total ? 'block' : 'none';
+}
+function showMoreFeed() { state.feedLimit += 200; renderFeed(state.analytics); }
+
+function renderFooter(a) {
+    var parts = [
+        'Logical days run 02:30–02:30 local time; sessions logged 00:00–02:30 count toward the previous day.',
+        'All times are shown in this device’s timezone.',
+        'Weekly goals are stored in this browser (localStorage), not in the database.',
+        'Category filter applies to every card except the Categories table, which always shows all categories.'
+    ];
+    if (state.excluded.length) parts.push('<span style="color:var(--warn)">' + state.excluded.length + ' malformed row' + (state.excluded.length === 1 ? '' : 's') + ' excluded from all metrics (see console).</span>');
+    document.getElementById('pageFoot').innerHTML = parts.join(' ');
+    if (state.excluded.length) console.warn('Excluded rows:', state.excluded);
+}
+
+// ---------- controls ----------
+document.getElementById('trendRange').addEventListener('click', function (e) {
+    if (e.target.tagName !== 'BUTTON') return;
+    state.trendRange = e.target.dataset.r;
+    this.querySelectorAll('button').forEach(function (b) { b.classList.toggle('active', b === e.target); });
+    renderTrend(state.analytics);
+});
+document.getElementById('hmRange').addEventListener('click', function (e) {
+    if (e.target.tagName !== 'BUTTON') return;
+    state.hmWeeks = parseInt(e.target.dataset.w);
+    this.querySelectorAll('button').forEach(function (b) { b.classList.toggle('active', b === e.target); });
+    renderHeatmap(state.analytics);
+});
+
+// ---------- init ----------
+(function init() {
+    if (DEMO) { var b = document.getElementById('demoBanner'); b.hidden = false; b.style.display = 'flex'; }
+    document.getElementById('sessionDate').value = TB.logicalToday(new Date());
+    Chart.defaults.font.family = "'DM Sans',system-ui,sans-serif";
+    Chart.defaults.color = '#9494ac';
+    loadGoalEditor();
+    refreshAll();
+})();
 </script>
 </body>
 </html>

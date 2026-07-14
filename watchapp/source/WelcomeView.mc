@@ -120,12 +120,12 @@ class SetupDoneDelegate extends WatchUi.BehaviorDelegate {
     }
 
     function onSelect() {
-        WatchUi.switchToView(new Rez.Menus.MainMenu(), new watchappMenuDelegate(), WatchUi.SLIDE_UP);
+        MainMenu.switchTo(WatchUi.SLIDE_UP);
         return true;
     }
 
     function onBack() {
-        WatchUi.switchToView(new Rez.Menus.MainMenu(), new watchappMenuDelegate(), WatchUi.SLIDE_UP);
+        MainMenu.switchTo(WatchUi.SLIDE_UP);
         return true;
     }
 }

@@ -8,7 +8,14 @@ class SessionStore {
     function initialize() {}
 
     function todayKey() {
-        var info = Gregorian.info(currentSessionMoment(), Time.FORMAT_SHORT);
+        return dayKeyForEpoch(Time.now().value());
+    }
+
+    // Sessions ending before the 02:30 rollover count toward the previous
+    // calendar day, matching the dashboard's late-night handling.
+    function dayKeyForEpoch(epochSeconds) {
+        var shifted = new Time.Moment(epochSeconds - sessionDayRolloverSeconds());
+        var info = Gregorian.info(shifted, Time.FORMAT_SHORT);
         return info.year * 10000 + info.month * 100 + info.day;
     }
 
@@ -18,15 +25,24 @@ class SessionStore {
         return info.year * 10000 + info.month * 100 + info.day;
     }
 
-    function logSession(durationMinutes, tag) {
-        var key = todayKey();
+    // Cloud reconcile only corrects this recent window; older aggregates are
+    // maintained incrementally on-watch. Keeps the stats GET small enough for
+    // the device's response memory (a 400-day fetch -402s on real data).
+    function reconcileWindowStartKey() {
+        return dayKeyForEpoch(Time.now().value() - 30 * 86400);
+    }
+
+    // endEpochSeconds is when the countdown actually finished; a timer that
+    // expired while the app was closed logs to that day, not to reopen day.
+    function logSessionAt(durationMinutes, tag, endEpochSeconds) {
+        var key = dayKeyForEpoch(endEpochSeconds);
         var localId = nextLocalSessionId();
 
         // Persist the cloud-sync queue and the lightweight daily aggregates FIRST,
         // then the heavier session ledger. The ledger is the memory-hungry step, so
         // if it ever runs the heap dry the session has already reached the dashboard
         // queue and today's totals instead of being lost.
-        queuePendingSession(localId, durationMinutes, key, tag);
+        queuePendingSession(localId, durationMinutes, key, tag, endEpochSeconds);
         applySessionToAggregates(key, durationMinutes, tag);
         appendSessionToLedger(localId, durationMinutes, key, tag);
 
@@ -44,12 +60,6 @@ class SessionStore {
         var tagBoxesKey = "boxes_" + tag;
         pruneOld(Storage.getValue(tagMinsKey), tagMinsKey);
         pruneOld(Storage.getValue(tagBoxesKey), tagBoxesKey);
-    }
-
-    function undoLast() {
-        var info = undoLastRecord();
-        if (info == null) { return 0; }
-        return info["duration"];
     }
 
     function undoLastRecord() {
@@ -107,12 +117,6 @@ class SessionStore {
         };
         clearUndoState();
         return undone;
-    }
-
-    function getLastSessionDuration() {
-        var dur = Storage.getValue("last_dur");
-        if (dur == null) { return 0; }
-        return dur;
     }
 
     function clearToday() {
@@ -225,22 +229,25 @@ class SessionStore {
         return pending[0];
     }
 
-    function queuePendingSession(localId, durationMinutes, dayKey, tag) as Void {
+    function queuePendingSession(localId, durationMinutes, dayKey, tag, endEpochSeconds) as Void {
         var pending = getPendingSessions();
         pending.add({
             "local_id" => localId,
             "date_key" => dayKey,
             "duration" => durationMinutes,
-            "tag" => tag
+            "tag" => tag,
+            "end_epoch" => endEpochSeconds
         });
         Storage.setValue("pending_sessions", pending);
     }
 
-    function removePendingSessionByLocalId(localId) as Void {
-        if (localId == null) { return; }
+    // Returns true when the session was still queued; false lets the caller
+    // detect an undo that raced the in-flight upload.
+    function removePendingSessionByLocalId(localId) as Lang.Boolean {
+        if (localId == null) { return false; }
 
         var pending = getPendingSessions();
-        if (pending.size() == 0) { return; }
+        if (pending.size() == 0) { return false; }
 
         var updated = [];
         var changed = false;
@@ -255,6 +262,7 @@ class SessionStore {
         if (changed) {
             Storage.setValue("pending_sessions", updated);
         }
+        return changed;
     }
 
     function setLastRemoteIdForLocalId(localId, remoteId) as Void {
@@ -278,12 +286,12 @@ class SessionStore {
     }
 
     function reconcileRecentWithRemote(rows) as Void {
-        var cutoffKey = syncCutoffKey();
+        var windowStart = reconcileWindowStartKey();
         var merged = [];
 
         if (rows != null && rows instanceof Lang.Array) {
             for (var i = 0; i < rows.size(); i++) {
-                var session = remoteRowToLedgerSession(rows[i], cutoffKey);
+                var session = remoteRowToLedgerSession(rows[i], windowStart);
                 if (session != null) {
                     merged.add(session);
                 }
@@ -293,7 +301,7 @@ class SessionStore {
         var pending = getPendingSessions();
         for (var j = 0; j < pending.size(); j++) {
             var pendingDay = pending[j]["date_key"];
-            if (pendingDay != null && pendingDay >= cutoffKey) {
+            if (pendingDay != null && pendingDay >= windowStart) {
                 merged.add({
                     "local_id" => pending[j]["local_id"],
                     "remote_id" => null,
@@ -306,7 +314,11 @@ class SessionStore {
 
         saveSessionLedger(merged);
         Storage.setValue("ledger_hydrated", true);
-        rebuildAggregatesFromLedger(merged);
+
+        stripWindowFromAggregates(windowStart);
+        for (var k = 0; k < merged.size(); k++) {
+            applySessionToAggregates(merged[k]["date_key"], merged[k]["duration"], merged[k]["tag"]);
+        }
     }
 
     function getSessionLedger() as Lang.Array {
@@ -505,15 +517,6 @@ class SessionStore {
         }
     }
 
-    private function applyPendingSessionsForDay(dayKey) as Void {
-        var pending = getPendingSessions();
-        for (var i = 0; i < pending.size(); i++) {
-            if (pending[i]["date_key"] == dayKey) {
-                applySessionToAggregates(dayKey, pending[i]["duration"], pending[i]["tag"]);
-            }
-        }
-    }
-
     private function removePendingSessionsForDay(dayKey) as Void {
         var pending = getPendingSessions();
         if (pending.size() == 0) { return; }
@@ -594,27 +597,34 @@ class SessionStore {
         }
     }
 
-    private function rebuildAggregatesFromLedger(sessions) as Void {
-        clearAllAggregates();
+    private function stripWindowFromAggregates(windowStart) as Void {
+        stripWindowFromDict("mins", windowStart);
+        stripWindowFromDict("boxes", windowStart);
 
-        for (var i = 0; i < sessions.size(); i++) {
-            applySessionToAggregates(sessions[i]["date_key"], sessions[i]["duration"], sessions[i]["tag"]);
+        var knownTags = Storage.getValue("known_tags");
+        if (knownTags == null) { return; }
+
+        for (var i = 0; i < knownTags.size(); i++) {
+            stripWindowFromDict("mins_" + knownTags[i], windowStart);
+            stripWindowFromDict("boxes_" + knownTags[i], windowStart);
         }
     }
 
-    private function clearAllAggregates() as Void {
-        Storage.setValue("mins", {});
-        Storage.setValue("boxes", {});
+    private function stripWindowFromDict(storageKey, windowStart) as Void {
+        var data = Storage.getValue(storageKey);
+        if (!(data instanceof Lang.Dictionary)) { return; }
 
-        var knownTags = Storage.getValue("known_tags");
-        if (knownTags == null) { knownTags = []; }
-
-        for (var i = 0; i < knownTags.size(); i++) {
-            Storage.setValue("mins_" + knownTags[i], {});
-            Storage.setValue("boxes_" + knownTags[i], {});
+        var keys = data.keys();
+        var changed = false;
+        for (var i = 0; i < keys.size(); i++) {
+            if (asNumber(keys[i]) >= windowStart) {
+                data.remove(keys[i]);
+                changed = true;
+            }
         }
-
-        Storage.setValue("known_tags", []);
+        if (changed) {
+            Storage.setValue(storageKey, data);
+        }
     }
 
     private function normalizeLedgerSession(session, cutoffKey) {
@@ -680,16 +690,24 @@ class SessionStore {
         return year * 10000 + month * 100 + day;
     }
 
-    private function effectiveDateKeyForRemoteRow(row) {
-        var createdAt = row["created_at"];
-        var createdAtKey = parseCreatedAtToDateKey(createdAt);
-        if (createdAtKey != 0) {
-            return createdAtKey;
+    // Mirrors the dashboard's day-attribution rule exactly: trust the stored
+    // session_date, except for legacy rows where it matches created_at's raw
+    // calendar day while the 02:30 rule says the previous day. Preferring
+    // created_at unconditionally re-dated backdated manual entries.
+    function effectiveDateKeyForRemoteRow(row) {
+        var storedKey = parseDateString(row["session_date"]);
+        var rolledKey = parseCreatedAtToDateKey(row["created_at"], true);
+
+        if (storedKey == 0) { return rolledKey; }
+
+        var calendarKey = parseCreatedAtToDateKey(row["created_at"], false);
+        if (rolledKey != 0 && storedKey == calendarKey && rolledKey != calendarKey) {
+            return rolledKey;
         }
-        return parseDateString(row["session_date"]);
+        return storedKey;
     }
 
-    private function parseCreatedAtToDateKey(value) {
+    private function parseCreatedAtToDateKey(value, applyRollover) {
         if (!(value instanceof Lang.String) || value.length() < 19) { return 0; }
 
         try {
@@ -724,7 +742,8 @@ class SessionStore {
                 }
             }
 
-            var shiftedMoment = new Time.Moment(utcMoment.value() - sessionDayRolloverSeconds());
+            var shiftSeconds = applyRollover ? sessionDayRolloverSeconds() : 0;
+            var shiftedMoment = new Time.Moment(utcMoment.value() - shiftSeconds);
             var localInfo = Gregorian.info(shiftedMoment, Time.FORMAT_SHORT);
             return localInfo.year * 10000 + localInfo.month * 100 + localInfo.day;
         } catch(e instanceof Lang.Exception) {
@@ -753,6 +772,9 @@ class SessionStore {
     private function currentSessionMoment() as Time.Moment {
         return new Time.Moment(Time.now().value() - sessionDayRolloverSeconds());
     }
+
+    // The reconcile in parseCreatedAtToDateKey shifts by the same amount, so
+    // watch-logged and cloud-reconciled sessions land on the same day.
 
     private function sessionDayRolloverSeconds() as Lang.Number {
         return (2 * 3600) + (30 * 60);
