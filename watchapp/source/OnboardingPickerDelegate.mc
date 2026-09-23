@@ -17,8 +17,8 @@ class OnboardingPickerDelegate extends WatchUi.Menu2InputDelegate {
         var id = item.getId();
 
         if (id == :add_custom) {
-            if (gOnboardingSelected.size() >= 5) {
-                OnboardingPickerView.show(gOnboardingSelected, "Max 5 projects");
+            if (gOnboardingSelected.size() >= PROJECT_MAX_COUNT) {
+                OnboardingPickerView.show(gOnboardingSelected, "Max " + PROJECT_MAX_COUNT + " projects");
                 return;
             }
 
@@ -71,7 +71,7 @@ class OnboardingPickerDelegate extends WatchUi.Menu2InputDelegate {
                 }
             }
             updated = remaining;
-        } else if (updated.size() < 5) {
+        } else if (updated.size() < PROJECT_MAX_COUNT) {
             updated.add(presetName);
         }
 
@@ -95,7 +95,7 @@ class OnboardingCustomTextDelegate extends WatchUi.TextPickerDelegate {
     function onTextEntered(text, changed) {
         var normalized = normalizeProjectName(text);
 
-        if (normalized != null && gOnboardingSelected.size() < 5 && !projectArrayContains(gOnboardingSelected, normalized)) {
+        if (normalized != null && gOnboardingSelected.size() < PROJECT_MAX_COUNT &&!projectArrayContains(gOnboardingSelected, normalized)) {
             gOnboardingSelected.add(normalized);
         }
 

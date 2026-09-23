@@ -315,9 +315,18 @@ class SessionStore {
         saveSessionLedger(merged);
         Storage.setValue("ledger_hydrated", true);
 
-        stripWindowFromAggregates(windowStart);
+        stripWindowFromAggregates(windowStart, merged);
+
+        // known_tags is checked once per distinct tag rather than per session;
+        // the per-session scan cost sessions x projects inside one callback.
+        var seenTags = {};
         for (var k = 0; k < merged.size(); k++) {
-            applySessionToAggregates(merged[k]["date_key"], merged[k]["duration"], merged[k]["tag"]);
+            addSessionToAggregates(merged[k]["date_key"], merged[k]["duration"], merged[k]["tag"]);
+            seenTags.put(merged[k]["tag"], true);
+        }
+        var tags = seenTags.keys();
+        for (var t = 0; t < tags.size(); t++) {
+            ensureKnownTag(tags[t]);
         }
     }
 
@@ -463,6 +472,11 @@ class SessionStore {
     }
 
     private function applySessionToAggregates(dayKey, durationMinutes, tag) as Void {
+        addSessionToAggregates(dayKey, durationMinutes, tag);
+        ensureKnownTag(tag);
+    }
+
+    private function addSessionToAggregates(dayKey, durationMinutes, tag) as Void {
         var mins = readDict("mins");
         mins.put(dayKey, asNumber(mins[dayKey]) + durationMinutes);
         Storage.setValue("mins", mins);
@@ -480,8 +494,6 @@ class SessionStore {
         var tagBoxes = readDict(tagBoxesKey);
         tagBoxes.put(dayKey, asNumber(tagBoxes[dayKey]) + 1);
         Storage.setValue(tagBoxesKey, tagBoxes);
-
-        ensureKnownTag(tag);
     }
 
     private function clearDayFromAggregates(dayKey) as Void {
@@ -597,28 +609,50 @@ class SessionStore {
         }
     }
 
-    private function stripWindowFromAggregates(windowStart) as Void {
-        stripWindowFromDict("mins", windowStart);
-        stripWindowFromDict("boxes", windowStart);
+    // Clears only the reconcile window's own day keys, so the sync cost stays
+    // flat as history accumulates. Walking every stored key tripped the
+    // watchdog (sim, 100-row response) at ~2.5k day entries across projects.
+    private function stripWindowFromAggregates(windowStart, merged) as Void {
+        var windowKeys = reconcileWindowDayKeys(windowStart, merged);
+
+        stripWindowFromDict("mins", windowKeys);
+        stripWindowFromDict("boxes", windowKeys);
 
         var knownTags = Storage.getValue("known_tags");
         if (knownTags == null) { return; }
 
         for (var i = 0; i < knownTags.size(); i++) {
-            stripWindowFromDict("mins_" + knownTags[i], windowStart);
-            stripWindowFromDict("boxes_" + knownTags[i], windowStart);
+            stripWindowFromDict("mins_" + knownTags[i], windowKeys);
+            stripWindowFromDict("boxes_" + knownTags[i], windowKeys);
         }
     }
 
-    private function stripWindowFromDict(storageKey, windowStart) as Void {
+    // Every day key from windowStart through a few days past today (the insert
+    // policy caps session_date at current_date + 2), plus the day of every
+    // session about to be re-added, so a row dated later than that (e.g. one
+    // written with the service role) is still cleared before it is re-counted.
+    // 12-hour steps never skip a 23-hour DST day.
+    private function reconcileWindowDayKeys(windowStart, merged) as Lang.Array {
+        var keys = {};
+        var now = Time.now().value();
+        for (var t = now - 31 * 86400; t <= now + 3 * 86400; t += 43200) {
+            var key = dayKeyForEpoch(t);
+            if (key >= windowStart) { keys.put(key, true); }
+        }
+        for (var i = 0; i < merged.size(); i++) {
+            keys.put(merged[i]["date_key"], true);
+        }
+        return keys.keys();
+    }
+
+    private function stripWindowFromDict(storageKey, windowKeys) as Void {
         var data = Storage.getValue(storageKey);
         if (!(data instanceof Lang.Dictionary)) { return; }
 
-        var keys = data.keys();
         var changed = false;
-        for (var i = 0; i < keys.size(); i++) {
-            if (asNumber(keys[i]) >= windowStart) {
-                data.remove(keys[i]);
+        for (var i = 0; i < windowKeys.size(); i++) {
+            if (data.hasKey(windowKeys[i])) {
+                data.remove(windowKeys[i]);
                 changed = true;
             }
         }
@@ -694,21 +728,27 @@ class SessionStore {
     // session_date, except for legacy rows where it matches created_at's raw
     // calendar day while the 02:30 rule says the previous day. Preferring
     // created_at unconditionally re-dated backdated manual entries.
+    // created_at is parsed once per row; that parse was about half of the
+    // stats callback's watchdog budget at the 100-row cap when done twice.
     function effectiveDateKeyForRemoteRow(row) {
         var storedKey = parseDateString(row["session_date"]);
-        var rolledKey = parseCreatedAtToDateKey(row["created_at"], true);
+        var createdEpoch = parseCreatedAtEpoch(row["created_at"]);
+        if (createdEpoch == null) { return storedKey; }
 
+        var rolledKey = dayKeyForEpoch(createdEpoch);
         if (storedKey == 0) { return rolledKey; }
 
-        var calendarKey = parseCreatedAtToDateKey(row["created_at"], false);
-        if (rolledKey != 0 && storedKey == calendarKey && rolledKey != calendarKey) {
+        var calendarInfo = Gregorian.info(new Time.Moment(createdEpoch), Time.FORMAT_SHORT);
+        var calendarKey = calendarInfo.year * 10000 + calendarInfo.month * 100 + calendarInfo.day;
+        if (storedKey == calendarKey && rolledKey != calendarKey) {
             return rolledKey;
         }
         return storedKey;
     }
 
-    private function parseCreatedAtToDateKey(value, applyRollover) {
-        if (!(value instanceof Lang.String) || value.length() < 19) { return 0; }
+    // UTC epoch seconds for an ISO-8601 created_at, or null when unparseable.
+    private function parseCreatedAtEpoch(value) {
+        if (!(value instanceof Lang.String) || value.length() < 19) { return null; }
 
         try {
             var year = value.substring(0, 4).toNumber();
@@ -742,12 +782,9 @@ class SessionStore {
                 }
             }
 
-            var shiftSeconds = applyRollover ? sessionDayRolloverSeconds() : 0;
-            var shiftedMoment = new Time.Moment(utcMoment.value() - shiftSeconds);
-            var localInfo = Gregorian.info(shiftedMoment, Time.FORMAT_SHORT);
-            return localInfo.year * 10000 + localInfo.month * 100 + localInfo.day;
+            return utcMoment.value();
         } catch(e instanceof Lang.Exception) {
-            return 0;
+            return null;
         }
     }
 
@@ -773,8 +810,8 @@ class SessionStore {
         return new Time.Moment(Time.now().value() - sessionDayRolloverSeconds());
     }
 
-    // The reconcile in parseCreatedAtToDateKey shifts by the same amount, so
-    // watch-logged and cloud-reconciled sessions land on the same day.
+    // The reconcile in effectiveDateKeyForRemoteRow shifts by the same amount,
+    // so watch-logged and cloud-reconciled sessions land on the same day.
 
     private function sessionDayRolloverSeconds() as Lang.Number {
         return (2 * 3600) + (30 * 60);

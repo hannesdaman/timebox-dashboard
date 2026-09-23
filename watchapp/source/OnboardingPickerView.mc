@@ -7,7 +7,7 @@ class OnboardingPickerView {
         var selected = normalizeProjectList(copyProjects(selectedProjects));
         gOnboardingSelected = selected;
 
-        var title = "Pick projects (" + selected.size() + "/5)";
+        var title = "Pick projects (" + selected.size() + "/" + PROJECT_MAX_COUNT + ")";
         if (message != null) {
             title = message;
         }
@@ -35,10 +35,10 @@ class OnboardingPickerView {
             }
         }
 
-        if (selected.size() < 5) {
+        if (selected.size() < PROJECT_MAX_COUNT) {
             menu.addItem(new WatchUi.MenuItem("Add custom", "Type your own name", :add_custom, null));
         } else {
-            menu.addItem(new WatchUi.MenuItem("Add custom", "Max 5 projects reached", :add_custom, null));
+            menu.addItem(new WatchUi.MenuItem("Add custom", "Max " + PROJECT_MAX_COUNT + " projects reached", :add_custom, null));
         }
 
         var saveHint = "Pick at least 1 project";

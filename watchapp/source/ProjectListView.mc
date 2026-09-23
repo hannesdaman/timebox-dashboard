@@ -20,7 +20,7 @@ class ProjectListView {
             menu.addItem(new WatchUi.MenuItem(projects[i], "Rename or delete", i, null));
         }
 
-        if (projects.size() < 5) {
+        if (projects.size() < PROJECT_MAX_COUNT) {
             menu.addItem(new WatchUi.MenuItem("+ Add project", "Choose or type a name", :add_project, null));
         }
 

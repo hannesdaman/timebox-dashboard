@@ -96,7 +96,7 @@ function applyProjectNameChange(name, mode, index, currentName) as Void {
     var projects = getProjects();
 
     if (mode == :add_project) {
-        if (projects.size() >= 5 || projectArrayContains(projects, normalized)) { return; }
+        if (projects.size() >= PROJECT_MAX_COUNT || projectArrayContains(projects, normalized)) { return; }
         projects.add(normalized);
         saveProjects(projects);
         return;

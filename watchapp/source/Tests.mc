@@ -101,6 +101,14 @@ function testRemoteRowDayAttribution(logger as Test.Logger) as Lang.Boolean {
     var noStored = { "session_date" => null, "created_at" => "2026-07-13T12:00:00+02:00" };
     Test.assertEqualMessage(store.effectiveDateKeyForRemoteRow(noStored), 20260713, "created_at fallback");
 
+    // Missing created_at: nothing to compare against, the stored day wins.
+    var noCreated = { "session_date" => "2026-07-10", "created_at" => null };
+    Test.assertEqualMessage(store.effectiveDateKeyForRemoteRow(noCreated), 20260710, "stored day without created_at");
+
+    // PostgREST's UTC form with microseconds; 00:30 local is a cutoff miss.
+    var microUtc = { "session_date" => "2026-07-13", "created_at" => "2026-07-12T22:30:00.123456+00:00" };
+    Test.assertEqualMessage(store.effectiveDateKeyForRemoteRow(microUtc), 20260712, "microsecond UTC stamp rolls back");
+
     return true;
 }
 
@@ -124,6 +132,100 @@ function testVibeLevelContract(logger as Test.Logger) as Lang.Boolean {
         Storage.setValue("vibe_level", saved);
     } else {
         Storage.deleteValue("vibe_level");
+    }
+    return true;
+}
+
+(:test)
+function testProjectListCap(logger as Test.Logger) as Lang.Boolean {
+    var many = [];
+    for (var i = 0; i < PROJECT_MAX_COUNT + 5; i++) {
+        many.add("Project " + i);
+    }
+    var capped = normalizeProjectList(many);
+    Test.assertEqualMessage(capped.size(), PROJECT_MAX_COUNT, "stored list capped");
+    Test.assertEqualMessage(capped[0], "Project 0", "order kept");
+
+    var dupes = normalizeProjectList(["coding", "Coding", " CODING ", "Book"]);
+    Test.assertEqualMessage(dupes.size(), 2, "case and space dupes merged");
+
+    var saved = Storage.getValue("projects");
+    Storage.deleteValue("projects");
+
+    for (var i = 0; i < PROJECT_MAX_COUNT; i++) {
+        applyProjectNameChange("Project " + i, :add_project, -1, null);
+    }
+    Test.assertEqualMessage(getProjects().size(), PROJECT_MAX_COUNT, "adds up to the cap");
+    applyProjectNameChange("One too many", :add_project, -1, null);
+    Test.assertEqualMessage(getProjects().size(), PROJECT_MAX_COUNT, "add past cap rejected");
+    Test.assertMessage(!projectArrayContains(getProjects(), "One too many"), "rejected name not stored");
+
+    if (saved != null) {
+        Storage.setValue("projects", saved);
+    } else {
+        Storage.deleteValue("projects");
+    }
+    return true;
+}
+
+(:test)
+function testReconcileStripsOnlyWindow(logger as Test.Logger) as Lang.Boolean {
+    var touched = ["mins", "boxes", "known_tags", "mins_Probe", "boxes_Probe",
+                   "mins_Fresh", "boxes_Fresh", "session_ledger", "ledger_hydrated",
+                   "pending_sessions"];
+    var saved = {};
+    for (var i = 0; i < touched.size(); i++) {
+        saved.put(touched[i], Storage.getValue(touched[i]));
+    }
+
+    var store = new SessionStore();
+    var now = Toybox.Time.now().value();
+    var oldKey = store.dayKeyForEpoch(now - 90 * 86400);
+    var windowKey = store.dayKeyForEpoch(now - 5 * 86400);
+    var todayKey = store.todayKey();
+    var aheadKey = store.dayKeyForEpoch(now + 2 * 86400);
+    // Past the time-based range; a service-role insert could date a row here.
+    var farKey = store.dayKeyForEpoch(now + 10 * 86400);
+    var farDate = "" + (farKey / 10000) + "-" + ((farKey / 100) % 100).format("%02d") + "-" + (farKey % 100).format("%02d");
+    var farRow = { "id" => 1, "session_date" => farDate, "created_at" => farDate + "T12:00:00+00:00", "duration" => 20, "tag" => "Probe" };
+
+    Storage.setValue("mins", { oldKey => 40, windowKey => 25, todayKey => 50, aheadKey => 10, farKey => 99 });
+    Storage.setValue("boxes", { oldKey => 2, windowKey => 1, todayKey => 2, aheadKey => 1 });
+    Storage.setValue("mins_Probe", { oldKey => 40, windowKey => 25, todayKey => 50 });
+    Storage.setValue("boxes_Probe", { oldKey => 2, windowKey => 1, todayKey => 2 });
+    Storage.setValue("known_tags", ["Probe"]);
+    Storage.deleteValue("pending_sessions");
+    Storage.deleteValue("mins_Fresh");
+    Storage.deleteValue("boxes_Fresh");
+    // Still-unsynced sessions today: the window is rebuilt from rows + pending.
+    store.queuePendingSession("t-1", 30, todayKey, "Probe", now);
+    store.queuePendingSession("t-2", 15, todayKey, "Fresh", now);
+
+    store.reconcileRecentWithRemote([farRow]);
+
+    var mins = Storage.getValue("mins");
+    var tagMins = Storage.getValue("mins_Probe");
+    Test.assertEqualMessage(mins[oldKey], 40, "history before window kept");
+    Test.assertEqualMessage(tagMins[oldKey], 40, "project history before window kept");
+    Test.assertMessage(!mins.hasKey(windowKey), "window day cleared");
+    Test.assertMessage(!tagMins.hasKey(windowKey), "project window day cleared");
+    Test.assertMessage(!mins.hasKey(aheadKey), "near-future day cleared");
+    Test.assertEqualMessage(mins[farKey], 20, "far-future row counted once, not stacked");
+    Test.assertEqualMessage(mins[todayKey], 45, "today rebuilt from pending");
+    Test.assertEqualMessage(tagMins[todayKey], 30, "project today rebuilt from pending");
+    Test.assertEqualMessage(Storage.getValue("mins_Fresh")[todayKey], 15, "new project aggregated");
+    Test.assertEqualMessage(Storage.getValue("boxes")[todayKey], 2, "today boxes rebuilt");
+    var known = Storage.getValue("known_tags");
+    Test.assertEqualMessage(known.size(), 2, "known tags deduped");
+    Test.assertEqualMessage(known[1], "Fresh", "new project registered once");
+
+    for (var i = 0; i < touched.size(); i++) {
+        var value = saved[touched[i]];
+        if (value != null) {
+            Storage.setValue(touched[i], value);
+        } else {
+            Storage.deleteValue(touched[i]);
+        }
     }
     return true;
 }

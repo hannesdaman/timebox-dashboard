@@ -317,6 +317,10 @@ function canInterpretRows(data) as Lang.Boolean {
     return false;
 }
 
+// Upper bound for the on-watch project list. Each project keeps its own
+// per-day aggregates that the stats reconcile walks, so the list stays bounded.
+const PROJECT_MAX_COUNT = 20;
+
 function getGenericProjectOptions() as Lang.Array {
     return [
         "Studying",
@@ -410,7 +414,7 @@ function normalizeProjectList(projects) as Lang.Array {
         var project = normalizeProjectName(projects[i]);
         if (project != null && !projectArrayContains(normalized, project)) {
             normalized.add(project);
-            if (normalized.size() >= 5) {
+            if (normalized.size() >= PROJECT_MAX_COUNT) {
                 break;
             }
         }
